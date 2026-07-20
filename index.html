@@ -567,6 +567,7 @@ function BadmintonTracker() {
               {step === "zone" && (
                 <>
 <div style={styles.panelLabel}>In welcher Zone {teamSize === 1 ? "befand sich" : "befanden sich"} <span style={{ color: COLORS[pending.winner === "a" ? "b" : "a"], fontWeight: 700 }}>{teamLabel(pending.winner === "a" ? "b" : "a")}</span>, kurz bevor {teamSize === 1 ? "er" : "sie"} den Ballwechsel {teamSize === 1 ? "verlor" : "verloren"}?</div>
+
                   <div style={styles.reasonGrid}>
                     {ZONES.map((z) => (
                       <button key={z.id} style={styles.reasonBtn} onClick={() => chooseZone(z.id)} title={z.hint}>
