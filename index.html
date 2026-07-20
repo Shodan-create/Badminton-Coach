@@ -552,8 +552,8 @@ function BadmintonTracker() {
               )}
               {step === "reason" && (
                 <>
-              <div style={styles.panelLabel}>Wodurch verlor <span style={{ color: COLORS[pending.winner === "a" ? "b" : "a"], fontWeight: 700 }}>{teamLabel(pending.winner === "a" ? "b" : "a")}</span> den Ballwechsel?</div>
- ding.winner)})</span></div>
+                     <div style={styles.panelLabel}>Wodurch verlor <span style={{ color: COLORS[pending.winner === "a" ? "b" : "a"], fontWeight: 700 }}>{teamLabel(pending.winner === "a" ? "b" : "a")}</span> den Ballwechsel?</div>
+
                   <div style={styles.reasonGrid}>
                     {REASONS.map((r) => (
                       <button key={r.id} style={styles.reasonBtn} onClick={() => chooseReason(r.id)} title={r.hint}>
