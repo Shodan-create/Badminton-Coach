@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Badminton Videoanalyse</title>
+    
+    <!-- Die absolut stabilen, klassischen MediaPipe Skripte -->
+    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
+    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
+    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
+
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -23,10 +29,12 @@
             background: #000;
             border-radius: 8px;
             overflow: hidden;
+            width: 100%;
+            max-width: 640px;
         }
         video {
             display: block;
-            max-width: 100%;
+            width: 100%;
             height: auto;
         }
         canvas {
@@ -43,6 +51,7 @@
         .status {
             color: #ffcc00;
             font-weight: bold;
+            font-size: 1.2em;
         }
     </style>
 </head>
@@ -50,62 +59,61 @@
 
 <div class="container">
     <h1>Badminton KI-Bewegungsanalyse</h1>
-    <p>Lade ein Video hoch, um dein Skelett-Tracking beim Smash oder der Beinarbeit zu sehen.</p>
+    <p>Lade dein Badminton-Video hoch. Das Skelett-Tracking startet automatisch beim Abspielen.</p>
     
     <div class="controls">
         <input type="file" id="fileInput" accept="video/*">
-        <p id="status" class="status">KI-Modell wird geladen... Bitte warten.</p>
+        <p id="status" class="status">KI-Modell wird initialisiert...</p>
     </div>
 
     <div class="video-container">
-        <video id="video" controls></video>
+        <video id="video" controls playsinline></video>
         <canvas id="canvas"></canvas>
     </div>
 </div>
 
-<script type="module">
-    // Lädt die benötigten Klassen absolut sicher und direkt von Google MediaPipe
-    import { PoseLandmarker, FilesetResolver } from "https://skypack.dev";
-
+<script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const fileInput = document.getElementById('fileInput');
     const statusText = document.getElementById('status');
-    
-    let poseLandmarker;
-    let animationFrameId;
 
-    // 1. MediaPipe KI-Modell initialisieren
-    async function initPoseEstimation() {
-        try {
-            const vision = await FilesetResolver.forVisionTasks(
-                "https://jsdelivr.net"
-            );
-            poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
-                baseOptions: {
-                    modelAssetPath: "https://googleapis.com",
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO",
-                outputSegmentationMasks: false
-            });
-            statusText.innerText = "KI-Modell bereit! Video hochladen zum Starten.";
-            statusText.style.color = "#00ffcc"; // Wird grün, wenn bereit
-        } catch (error) {
-            statusText.innerText = "Fehler beim Laden des Modells: " + error;
-            statusText.style.color = "#ff3333";
-            console.error(error);
+    // 1. MediaPipe Pose Instanz erstellen
+    const pose = new Pose({
+        locateFile: (file) => {
+            return `https://jsdelivr.net{file}`;
         }
-    }
+    });
+
+    pose.setOptions({
+        modelComplexity: 1, // 1 = Ausgewogen für Geschwindigkeit & Genauigkeit
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.5
+    });
+
+    // Sobald die KI Ergebnisse liefert, zeichnen wir sie auf das Canvas
+    pose.onResults((results) => {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (results.poseLandmarks) {
+            // Nutzen der offiziellen Zeichenfunktion von MediaPipe
+            drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#ffffff', lineWidth: 4});
+            drawLandmarks(ctx, results.poseLandmarks, {color: '#00ffcc', lineWidth: 2, radius: 5});
+        }
+    });
+
+    // Bestätigung, dass das Skript startbereit ist
+    statusText.innerText = "KI bereit! Bitte wähle ein Video aus.";
+    statusText.style.color = "#00ffcc";
 
     // 2. Video-Upload verarbeiten
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0]; // Holt die erste ausgewählte Datei
+        const file = e.target.files[0]; // Greift korrekt auf die erste ausgewählte Datei zu
         if (file) {
             const fileURL = URL.createObjectURL(file);
             video.src = fileURL;
-            video.style.display = "block";
             video.load();
             statusText.innerText = "Video geladen. Drücke auf Play zum Analysieren.";
             statusText.style.color = "#00ffcc";
@@ -117,72 +125,33 @@
         canvas.height = video.videoHeight;
     });
 
-    // 3. Analyse-Loop starten beim Abspielen
+    // 3. Analyse-Loop beim Abspielen des Videos triggern
+    let isProcessing = false;
+    async function processVideoFrame() {
+        if (video.paused || video.ended) {
+            isProcessing = false;
+            return;
+        }
+        
+        // Schickt das aktuelle Einzelbild an die KI
+        try {
+            await pose.send({ image: video });
+        } catch (err) {
+            console.error("Frame-Verarbeitung fehlgeschlagen:", err);
+        }
+
+        // Führt die Funktion beim nächsten Frame wieder aus
+        requestAnimationFrame(processVideoFrame);
+    }
+
     video.addEventListener('play', () => {
         statusText.innerText = "Analysiere Bewegung...";
         statusText.style.color = "#ffcc00";
-        
-        function processFrame() {
-            if (video.paused || video.ended) return;
-
-            if (poseLandmarker) {
-                const startTimeMs = performance.now();
-                const results = poseLandmarker.detectForVideo(video, startTimeMs);
-                drawResults(results);
-            }
-
-            animationFrameId = requestAnimationFrame(processFrame);
+        if (!isProcessing) {
+            isProcessing = true;
+            requestAnimationFrame(processVideoFrame);
         }
-        animationFrameId = requestAnimationFrame(processFrame);
     });
-
-    video.addEventListener('pause', () => {
-        cancelAnimationFrame(animationFrameId);
-    });
-
-    // 4. Skelett auf das Canvas zeichnen
-    function drawResults(results) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        if (!results.landmarks || results.landmarks.length === 0) return;
-
-        const landmarks = results.landmarks[0]; // Greift auf das erste gefundene Skelett zu
-
-        // Alle Gelenkpunkte zeichnen
-        landmarks.forEach((landmark) => {
-            if (landmark.visibility > 0.5) {
-                const x = landmark.x * canvas.width;
-                const y = landmark.y * canvas.height;
-                
-                ctx.beginPath();
-                ctx.arc(x, y, 6, 0, 2 * Math.PI);
-                ctx.fillStyle = "#00ffcc"; // Neon-Grün für die Gelenke
-                ctx.fill();
-            }
-        });
-
-        // Wichtige Badminton-Knochenverbindungen definieren
-        const connections = [, [11, 13], [13, 15], [12, 14], [14, 16], // Arme & Schultern, [12, 24], [23, 24],                     // Torso, [25, 27], [24, 26], [26, 28]             // Beine
-        ];
-
-        ctx.strokeStyle = "#ffffff"; // Weiße Linien für die Knochen
-        ctx.lineWidth = 4;
-
-        connections.forEach(([startIdx, endIdx]) => {
-            const start = landmarks[startIdx];
-            const end = landmarks[endIdx];
-
-            if (start && end && start.visibility > 0.5 && end.visibility > 0.5) {
-                ctx.beginPath();
-                ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
-                ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
-                ctx.stroke();
-            }
-        });
-    }
-
-    // Starten
-    initPoseEstimation();
 </script>
 
 </body>
