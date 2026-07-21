@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Badminton Videoanalyse</title>
-    <!-- Zuverlässiges Laden der Google MediaPipe Bibliotheken -->
-    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -65,9 +63,9 @@
     </div>
 </div>
 
-<script>
-    // Holt die Klassen sicher aus dem globalen MediaPipe-Objekt
-    const { PoseLandmarker, FilesetResolver } = qg.tasks.vision;
+<script type="module">
+    // Lädt die benötigten Klassen absolut sicher und direkt von Google MediaPipe
+    import { PoseLandmarker, FilesetResolver } from "https://skypack.dev";
 
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
@@ -93,20 +91,24 @@
                 outputSegmentationMasks: false
             });
             statusText.innerText = "KI-Modell bereit! Video hochladen zum Starten.";
+            statusText.style.color = "#00ffcc"; // Wird grün, wenn bereit
         } catch (error) {
             statusText.innerText = "Fehler beim Laden des Modells: " + error;
+            statusText.style.color = "#ff3333";
             console.error(error);
         }
     }
 
     // 2. Video-Upload verarbeiten
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files[0]; // Holt die erste ausgewählte Datei
         if (file) {
             const fileURL = URL.createObjectURL(file);
             video.src = fileURL;
+            video.style.display = "block";
             video.load();
-            statusText.innerText = "Video geladen. Drücke auf Play.";
+            statusText.innerText = "Video geladen. Drücke auf Play zum Analysieren.";
+            statusText.style.color = "#00ffcc";
         }
     });
 
@@ -115,9 +117,11 @@
         canvas.height = video.videoHeight;
     });
 
-    // 3. Analyse-Loop starten
+    // 3. Analyse-Loop starten beim Abspielen
     video.addEventListener('play', () => {
         statusText.innerText = "Analysiere Bewegung...";
+        statusText.style.color = "#ffcc00";
+        
         function processFrame() {
             if (video.paused || video.ended) return;
 
@@ -136,33 +140,33 @@
         cancelAnimationFrame(animationFrameId);
     });
 
-    // 4. Skelett zeichnen
+    // 4. Skelett auf das Canvas zeichnen
     function drawResults(results) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
         if (!results.landmarks || results.landmarks.length === 0) return;
 
-        const landmarks = results.landmarks[0];
+        const landmarks = results.landmarks[0]; // Greift auf das erste gefundene Skelett zu
 
-        // Punkte zeichnen
+        // Alle Gelenkpunkte zeichnen
         landmarks.forEach((landmark) => {
-            if (landmark.visibility > 0.5) { // Nur sichtbare Gelenke zeichnen
+            if (landmark.visibility > 0.5) {
                 const x = landmark.x * canvas.width;
                 const y = landmark.y * canvas.height;
                 
                 ctx.beginPath();
-                ctx.arc(x, y, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = "#00ffcc";
+                ctx.arc(x, y, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = "#00ffcc"; // Neon-Grün für die Gelenke
                 ctx.fill();
             }
         });
 
-        // Knochen/Linien definieren
-        const connections = [, [11, 13], [13, 15], [12, 14], [14, 16], // Arme und Schultern, [12, 24], [23, 24],                      // Torso, [25, 27], [24, 26], [26, 28]             // Beine
+        // Wichtige Badminton-Knochenverbindungen definieren
+        const connections = [, [11, 13], [13, 15], [12, 14], [14, 16], // Arme & Schultern, [12, 24], [23, 24],                     // Torso, [25, 27], [24, 26], [26, 28]             // Beine
         ];
 
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#ffffff"; // Weiße Linien für die Knochen
+        ctx.lineWidth = 4;
 
         connections.forEach(([startIdx, endIdx]) => {
             const start = landmarks[startIdx];
