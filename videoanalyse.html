@@ -119,9 +119,9 @@
     const clearBtn = document.getElementById('clearBtn');
 
     let isDrawing = false;
-    let lines = []; // Speichert alle gezeichneten Linien
+    let lines = []; 
 
-    // 1. Video laden (Unterstützt MP4 und MOV von Apple-Geräten)
+    // 1. Video laden
     fileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -140,7 +140,6 @@
         video.playbackRate = parseFloat(speedSelect.value);
     });
 
-    // Fenster-Größenänderung abfangen
     window.addEventListener('resize', () => {
         if(video.videoWidth) {
             canvas.width = video.videoWidth;
@@ -164,7 +163,6 @@
         video.playbackRate = parseFloat(speedSelect.value);
     });
 
-    // Frame-by-Frame Steuerung (ca. 0.04 Sekunden pro Frame bei 25fps)
     prevFrame.addEventListener('click', () => {
         video.pause();
         playBtn.innerText = "▶ Play";
@@ -177,10 +175,9 @@
         video.currentTime = Math.min(video.duration, video.currentTime + 0.04);
     });
 
-    // 3. Manuelles Zeichen-System auf dem Canvas
+    // 3. Manuelles Zeichen-System
     function getMousePos(e) {
         const rect = canvas.getBoundingClientRect();
-        // Berechnet die exakte Position passend zur echten Video-Auflösung
         return {
             x: ((e.clientX - rect.left) / rect.width) * canvas.width,
             y: ((e.clientY - rect.top) / rect.height) * canvas.height
@@ -206,10 +203,9 @@
         isDrawing = false;
     });
 
-    // Zeichnet alle Linien neu auf das Feld
     function redrawCanvas() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = "#00ffcc"; // Tolles Neongrün für Sichtbarkeit im Sportvideo
+        ctx.strokeStyle = "#00ffcc"; 
         ctx.lineWidth = 5;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
