@@ -4,9 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Badminton Videoanalyse</title>
-    <!-- MediaPipe Links für die KI-Bibliothek -->
-        <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
-    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -38,7 +35,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            pointer-events: none; /* Klicks gehen durch das Canvas aufs Video */
+            pointer-events: none;
         }
         .controls {
             margin: 20px 0;
@@ -66,7 +63,13 @@
     </div>
 </div>
 
-<script>
+<!-- Hier nutzen wir type="module", um MediaPipe sauber zu importieren -->
+<script type="module">
+    import {
+        PoseLandmarker,
+        FilesetResolver
+    } from "https://jsdelivr.net";
+
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -85,7 +88,7 @@
             poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
                 baseOptions: {
                     modelAssetPath: "https://googleapis.com",
-                    delegate: "GPU" // Nutzt Grafikkarte für maximale Geschwindigkeit
+                    delegate: "GPU"
                 },
                 runningMode: "VIDEO",
                 outputSegmentationMasks: false
@@ -108,19 +111,17 @@
         }
     });
 
-    // Meta-Daten abwarten, um Canvas-Größe anzupassen
     video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
     });
 
-    // 3. Analyse-Loop starten, wenn Video spielt
+    // 3. Analyse-Loop starten
     video.addEventListener('play', () => {
         statusText.innerText = "Analysiere Bewegung...";
         function processFrame() {
             if (video.paused || video.ended) return;
 
-            // KI-Erkennung für das aktuelle Frame triggern
             if (poseLandmarker) {
                 const startTimeMs = performance.now();
                 const results = poseLandmarker.detectForVideo(video, startTimeMs);
@@ -136,7 +137,7 @@
         cancelAnimationFrame(animationFrameId);
     });
 
-    // 4. Skelett auf das Canvas zeichnen
+    // 4. Skelett zeichnen
     function drawResults(results) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -144,24 +145,24 @@
 
         const landmarks = results.landmarks[0];
 
-        // Punkte zeichnen (z.B. Ellbogen, Knie, Schultern)
+        // Punkte zeichnen
         landmarks.forEach((landmark) => {
             const x = landmark.x * canvas.width;
             const y = landmark.y * canvas.height;
             
             ctx.beginPath();
             ctx.arc(x, y, 5, 0, 2 * Math.PI);
-            ctx.fillStyle = "#00ffcc"; // Neon-Türkis für Sichtbarkeit
+            ctx.fillStyle = "#00ffcc";
             ctx.fill();
         });
 
-        // Knochen/Linien zeichnen (Beispiel-Verbindungen für Badminton-Relevanz)
+        // Knochen/Linien definieren
         const connections = [
-            [11, 12], [11, 13], [13, 15], // Linker Arm (Schulter -> Ellbogen -> Handgelenk)
-            [12, 14], [14, 16],           // Rechter Arm (Wichtig für Schlagarm-Analyse)
-            [11, 23], [12, 24], [23, 24], // Torso / Hüfte
-            [23, 25], [25, 27],           // Linkes Bein (Hüfte -> Knie -> Knöchel)
-            [24, 26], [26, 28]            // Rechtes Bein (Wichtig für Ausfallschritt-Tiefe)
+            [11, 13], [13, 15], // Linker Arm
+            [12, 14], [14, 16], // Rechter Arm
+            [11, 12], [11, 23], [12, 24], [23, 24], // Torso
+            [23, 25], [25, 27], // Linkes Bein
+            [24, 26], [26, 28]  // Rechtes Bein
         ];
 
         ctx.strokeStyle = "#ffffff";
