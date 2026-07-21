@@ -1,13 +1,15 @@
+
 <!DOCTYPE html>
 <html lang="de">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Badminton Videoanalyse</title>
+    <title>Stabile KI Badminton Videoanalyse</title>
     
-    <!-- Die offiziellen, topaktuellen Bibliotheken direkt von Google AI Edge -->
-    <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
-    
+    <!-- Die beiden sichersten Bibliotheken für KI im Browser: p5 und ml5 -->
+    <script src="https://cloudflare.com"></script>
+    <script src="https://unpkg.com"></script>
+
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -15,32 +17,11 @@
             color: white;
             text-align: center;
             padding: 20px;
+            margin: 0;
         }
         .container {
             max-width: 800px;
             margin: auto;
-        }
-        .video-container {
-            position: relative;
-            display: inline-block;
-            margin-top: 20px;
-            background: #000;
-            border-radius: 8px;
-            overflow: hidden;
-            max-width: 100%;
-        }
-        video {
-            display: block;
-            max-width: 100%;
-            height: auto;
-        }
-        canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
         }
         .controls {
             margin: 20px 0;
@@ -50,141 +31,115 @@
             font-weight: bold;
             font-size: 1.2em;
         }
+        /* Das Vorschaufenster, in dem p5.js das Video und Skelett zeichnet */
+        #canvas-holder {
+            display: inline-block;
+            margin-top: 10px;
+            border: 4px solid #333;
+            border-radius: 8px;
+            background-color: #000;
+            overflow: hidden;
+        }
+        video {
+            display: none; /* Das rohe Video verstecken wir, p5 zeichnet es neu */
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>Badminton KI-Bewegungsanalyse</h1>
-    <p>Lade dein Badminton-Video hoch. Das Skelett-Tracking startet automatisch beim Abspielen.</p>
+    <p>Lade dein Badminton-Video hoch. Die KI zeichnet dein Skelett live ins Bild.</p>
     
     <div class="controls">
         <input type="file" id="fileInput" accept="video/*">
-        <p id="status" class="status">KI-Modell wird initialisiert...</p>
+        <p id="status" class="status">KI wird geladen... Bitte warten.</p>
     </div>
 
-    <div class="video-container">
-        <video id="video" controls playsinline></video>
-        <canvas id="canvas"></canvas>
-    </div>
+    <div id="canvas-holder"></div>
+    <video id="video" controls playsinline></video>
 </div>
 
 <script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const fileInput = document.getElementById('fileInput');
+    let video;
+    let poseNet;
+    let poses = [];
     const statusText = document.getElementById('status');
+    const fileInput = document.getElementById('fileInput');
 
-    let poseLandmarker;
-    let animationFrameId;
+    // p5.js startet automatisch und baut das Videofeld auf
+    function setup() {
+        // Erstellt das Anzeigefeld
+        const canvas = createCanvas(640, 480);
+        canvas.parent('canvas-holder');
 
-    // 1. Neues MediaPipe-System über das globale Objekt initialisieren
-    async function initPose() {
-        try {
-            // Holt sich den Resolver direkt aus dem geladenen Bundle-Skript
-            const vision = await mediapipe.tasks.vision.FilesetResolver.forVisionTasks(
-                "https://jsdelivr.net"
-            );
-            
-            poseLandmarker = await mediapipe.tasks.vision.PoseLandmarker.createFromOptions(vision, {
-                baseOptions: {
-                    modelAssetPath: "https://googleapis.com",
-                    delegate: "GPU"
-                },
-                runningMode: "VIDEO"
-            });
-            
-            statusText.innerText = "KI startbereit! Bitte wähle ein Video aus.";
-            statusText.style.color = "#00ffcc";
-        } catch (err) {
-            statusText.innerText = "Ladefehler: " + err;
-            statusText.style.color = "#ff3333";
-            console.error(err);
-        }
+        video = select('#video');
+        
+        // Initialisiert PoseNet (die Bewegungserkennung)
+        poseNet = ml5.poseNet(video, modelReady);
+        
+        // Sobald die KI eine Person sieht, speichert sie die Gelenke ab
+        poseNet.on('pose', function(results) {
+            poses = results;
+        });
     }
 
-    // 2. Lokales Video einlesen und im Player starten
-    fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0]; // Vergiss das [0] nicht, um das Video zu greifen!
+    function modelReady() {
+        statusText.innerText = "KI startbereit! Bitte wähle jetzt ein Video aus.";
+        statusText.style.color = "#00ffcc";
+    }
+
+    // Hört darauf, wenn du eine MP4 Datei hochlädst
+    fileInput.addEventListener('change', function(e) {
+        const file = e.target.files[0];
         if (file) {
             const fileURL = URL.createObjectURL(file);
-            video.src = fileURL;
-            video.load();
-            statusText.innerText = "Video geladen. Klicke auf Play!";
-            statusText.style.color = "#00ffcc";
+            video.elt.src = fileURL;
+            video.elt.load();
+            video.elt.play(); // Startet das Video automatisch
+            statusText.innerText = "Video läuft! Analysiere Körperhaltung...";
+            statusText.style.color = "#ffcc00";
         }
     });
 
-    video.addEventListener('loadedmetadata', () => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-    });
+    // p5.js zeichnet dieses Feld 60 Mal pro Sekunde komplett neu (Loop)
+    function draw() {
+        // Zeichnet das aktuelle Videobild auf das Canvas
+        image(video, 0, 0, width, height);
 
-    // 3. Frame für Frame an die KI senden, wenn das Video läuft
-    video.addEventListener('play', () => {
-        statusText.innerText = "Analysiere Laufweg & Schlägerhaltung...";
-        statusText.style.color = "#ffcc00";
-        
-        function processFrame() {
-            if (video.paused || video.ended) return;
-
-            if (poseLandmarker) {
-                const timestamp = performance.now();
-                const results = poseLandmarker.detectForVideo(video, timestamp);
-                drawSkeleton(results);
-            }
-            animationFrameId = requestAnimationFrame(processFrame);
+        // Wenn die KI Gelenke gefunden hat, zeichnen wir das Skelett darüber
+        if (poses.length > 0) {
+            drawSkeleton();
         }
-        animationFrameId = requestAnimationFrame(processFrame);
-    });
-
-    video.addEventListener('pause', () => {
-        cancelAnimationFrame(animationFrameId);
-    });
-
-    // 4. Zeichnen der Punkte und Linien
-    function drawSkeleton(results) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        if (!results.landmarks || results.landmarks.length === 0) return;
-
-        const landmarks = results.landmarks[0];
-
-        // Gelenke zeichnen
-        landmarks.forEach((landmark) => {
-            if (landmark.visibility > 0.5) {
-                ctx.beginPath();
-                ctx.arc(landmark.x * canvas.width, landmark.y * canvas.height, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = "#00ffcc";
-                ctx.fill();
-            }
-        });
-
-        // Vorgefertigte Knochen-Verbindungen (Schultern, Arme, Beine)
-        const connections = [
-            [11, 12], [11, 13], [13, 15], [12, 14], [14, 16], // Arme
-            [11, 23], [12, 24], [23, 24],                     // Torso
-            [23, 25], [25, 27], [24, 26], [26, 28]              // Beine
-        ];
-
-        ctx.strokeStyle = "#ffffff";
-        ctx.lineWidth = 3;
-
-        connections.forEach(([s, e]) => {
-            const start = landmarks[s];
-            const end = landmarks[e];
-            if (start && end && start.visibility > 0.5 && end.visibility > 0.5) {
-                ctx.beginPath();
-                ctx.moveTo(start.x * canvas.width, start.y * canvas.height);
-                ctx.lineTo(end.x * canvas.width, end.y * canvas.height);
-                ctx.stroke();
-            }
-        });
     }
 
-    // Start
-    initPose();
+    function drawSkeleton() {
+        // Schleife durch alle erkannten Personen (normalerweise 1)
+        for (let i = 0; i < poses.length; i++) {
+            let pose = poses[i].pose;
+            let skeleton = poses[i].skeleton;
+
+            // 1. Alle Schlüsselpunkte (Gelenke) als Punkte einzeichnen
+            for (let j = 0; j < pose.keypoints.length; j++) {
+                let keypoint = pose.keypoints[j];
+                // Nur zeichnen, wenn sich die KI zu mehr als 20% sicher ist
+                if (keypoint.score > 0.2) {
+                    fill(0, 255, 204); // Neongrün
+                    noStroke();
+                    ellipse(keypoint.position.x, keypoint.position.y, 12, 12);
+                }
+            }
+
+            // 2. Die Gelenke mit weißen Linien (Knochen) verbinden
+            for (let j = 0; j < skeleton.length; j++) {
+                let partA = skeleton[j][0];
+                let partB = skeleton[j][1];
+                stroke(255, 255, 255); // Weiß
+                strokeWeight(4);
+                line(partA.position.x, partA.position.y, partB.position.x, partB.position.y);
+            }
+        }
+    }
 </script>
 
 </body>
