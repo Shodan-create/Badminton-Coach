@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>KI Badminton Videoanalyse</title>
     
-    <!-- Die stabilen Google-Bibliotheken direkt eingebunden -->
+    <!-- Die stabilsten Skripte für das Google-Skelett-Tracking -->
     <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
     <script src="https://jsdelivr.net" crossorigin="anonymous"></script>
 
@@ -53,7 +53,7 @@
             font-weight: bold;
             font-size: 1.2em;
         }
-        select {
+        button, select {
             background: #333;
             color: white;
             border: none;
@@ -61,7 +61,7 @@
             border-radius: 5px;
             cursor: pointer;
             font-weight: bold;
-            margin-top: 10px;
+            margin: 5px;
         }
     </style>
 </head>
@@ -69,11 +69,11 @@
 
 <div class="container">
     <h1>🏸 Badminton KI-Bewegungsanalyse</h1>
-    <p>Lade dein Video hoch. Das digitale Skelett wird beim Abspielen automatisch darübergelegt.</p>
+    <p>Lade dein Video hoch. Das digitale Skelett wird beim Abspielen live darübergelegt.</p>
     
     <div class="controls">
         <input type="file" id="fileInput" accept="video/*, .mov">
-        <p id="status" class="status">KI wird gestartet...</p>
+        <p id="status" class="status">KI wird geladen... Bitte warten.</p>
     </div>
 
     <div class="video-container">
@@ -81,7 +81,7 @@
         <canvas id="canvas"></canvas>
     </div>
     
-    <div>
+    <div style="margin-top: 10px;">
         <select id="speedSelect">
             <option value="1">Normal (1x)</option>
             <option value="0.5">Slow-Mo (0.5x)</option>
@@ -98,41 +98,45 @@
     const statusText = document.getElementById('status');
     const speedSelect = document.getElementById('speedSelect');
 
-    // KI Setup mit festen, stabilen Versionen ohne externe Lade-Abstürze
+    // 1. KI-Konfiguration einrichten
     const pose = new Pose({
         locateFile: (file) => {
+            // Lädt die benötigten KI-Dateien stabil aus dem unblockierten jsDelivr-Speicher
             return `https://jsdelivr.net{file}`;
         }
     });
 
     pose.setOptions({
-        modelComplexity: 1,
+        modelComplexity: 1, // Perfekt ausbalanciert für schnelle Sportvideos
         smoothLandmarks: true,
         minDetectionConfidence: 0.5,
         minTrackingConfidence: 0.5
     });
 
-    // Zeichnet die Punkte live auf das Video
+    // 2. Sobald die KI Punkte im Bild findet, zeichnen wir sie sofort ein
     pose.onResults((results) => {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
         if (results.poseLandmarks) {
+            // Nutzt die eingebauten Zeichen-Befehle für Knochen und Punkte
             drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, {color: '#ffffff', lineWidth: 4});
-            drawLandmarks(ctx, results.poseLandmarks, {color: '#00ffcc', lineWidth: 1, radius: 5});
+            drawLandmarks(ctx, results.poseLandmarks, {color: '#00ffcc', lineWidth: 2, radius: 6});
         }
     });
 
-    // Signalisiert sofortige Bereitschaft
+    // Signalisiert, dass die Scripte geladen sind
     statusText.innerText = "KI startbereit! Bitte wähle jetzt dein Video aus.";
     statusText.style.color = "#00ffcc";
 
-    // Video hochladen und direkt in den Player einspeisen
+    // 3. Video-Upload verarbeiten
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files[0]; // Greift exakt auf deine ausgewählte Datei zu
         if (file) {
             const fileURL = URL.createObjectURL(file);
             video.src = fileURL;
             video.load();
-            statusText.innerText = "Video geladen. Drücke auf Play für die Analyse!";
+            statusText.innerText = "Video erfolgreich geladen! Drücke auf Play.";
+            statusText.style.color = "#00ffcc";
         }
     });
 
@@ -146,24 +150,36 @@
         video.playbackRate = parseFloat(speedSelect.value);
     });
 
-    // Sendet die Videobilder präzise beim Abspielen an die KI
-    async function updatePose() {
-        if (video.paused || video.ended) return;
+    // 4. Der Analyse-Loop (Schickt jedes Bild des Videos an die KI)
+    async function processFrame() {
+        if (video.paused || video.ended) {
+            return;
+        }
+        
+        // Bild an Google KI übergeben
         await pose.send({ image: video });
-        video.requestVideoFrameCallback(updatePose);
+        
+        // Nächstes Bild anfordern
+        video.requestVideoFrameCallback(processFrame);
     }
 
+    // Startet die Analyse, sobald du im Player auf Play drückst
     video.addEventListener('play', () => {
-        statusText.innerText = "Analysiere Bewegung...";
+        statusText.innerText = "Analysiere deinen Bewegungsablauf...";
+        statusText.style.color = "#ffcc00";
+        
         if (video.requestVideoFrameCallback) {
-            video.requestVideoFrameCallback(updatePose);
+            video.requestVideoFrameCallback(processFrame);
         } else {
+            // Fallback für ältere Browser
             setInterval(async () => {
-                if (!video.paused && !video.ended) await pose.send({ image: video });
+                if (!video.paused && !video.ended) {
+                    await pose.send({ image: video });
+                }
             }, 40);
         }
     });
 </script>
 
-</body>
+</body
 </html>
