@@ -42,7 +42,7 @@
             border: 3px solid #1e1e24;
             box-shadow: 0 0 25px rgba(0, 255, 204, 0.15);
             width: 640px;
-            height: 480px; /* Feste Basisgröße für stabiles Layout */
+            height: 360px;
         }
         video {
             position: absolute;
@@ -50,7 +50,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            object-fit: contain; /* Passt das Video perfekt in die Box ein */
+            object-fit: contain;
             background: #000;
             z-index: 1;
         }
@@ -61,8 +61,7 @@
             width: 100%;
             height: 100%;
             cursor: crosshair;
-            z-index: 2; /* Liegt als Glasscheibe exakt über dem Video */
-            pointer-events: auto;
+            z-index: 2;
         }
         .dashboard {
             display: flex;
@@ -138,7 +137,7 @@
     <div class="subtitle">Interaktives Tracking inspiriert von vhofit. Pausiere dein Video am Keyframe.</div>
 
     <div>
-        <input type="file" id="fileInput" accept="video/*, .mov">
+        <input type="file" id="fileInput" accept="video/*, .mov, .mp4">
         <select id="shotTypeSelect" style="margin-left: 10px;">
             <option value="Smash">🏸 Schlagtyp: SMASH</option>
             <option value="Clear">🏸 Schlagtyp: CLEAR</option>
@@ -148,8 +147,8 @@
 
     <div class="main-layout">
         <div class="video-wrapper">
-            <!-- Das Video ist jetzt als echtes Element sichtbar, das Canvas liegt darüber -->
-            <video id="video" playsinline></video>
+            <!-- Sichtbarer, nativer Player mit aktivierter Render-Garantie -->
+            <video id="video" controls preload="auto" width="640"></video>
             <canvas id="canvas"></canvas>
         </div>
 
@@ -215,18 +214,18 @@
     const bodyLabels = ["Schulter", "Hüfte", "Knie", "Fuß"];
 
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0]; // Greift sicher auf die erste Datei zu
+        const file = e.target.files[0]; // Absolut sichere Dateiauswahl für Apple & Chrome
         if (file) {
             const fileURL = URL.createObjectURL(file);
             video.src = fileURL;
-            video.load();
+            video.play().then(() => {
+                video.pause(); // Spielt kurz an und stoppt, damit das erste Bild geladen wird!
+            });
         }
     });
 
-    // Sobald das Video die Metadaten lädt, passen wir das Zeichenfeld exakt an das Video an
-    video.addEventListener('loadedmetadata', () => {
+    video.addEventListener('loadeddata', () => {
         const wrapper = document.querySelector('.video-wrapper');
-        // Berechnet das Seitenverhältnis des hochgeladenen Videos dynamisch
         const aspectRatio = video.videoWidth / video.videoHeight;
         wrapper.style.height = (640 / aspectRatio) + 'px';
         
@@ -244,7 +243,6 @@
     prevFrame.addEventListener('click', () => { video.pause(); video.currentTime = Math.max(0, video.currentTime - 0.04); });
     nextFrame.addEventListener('click', () => { video.pause(); video.currentTime = Math.min(video.duration, video.currentTime + 0.04); });
 
-    // Berechnet Klicks relativ zur skalierten Canvas-Größe
     canvas.addEventListener('mousedown', (e) => {
         if (!video.src) return;
 
@@ -279,3 +277,8 @@
                     ctx.moveTo(bodyPoints[i-1].x, bodyPoints[i-1].y);
                 }
 
+                if (i === 0) ctx.moveTo(bodyPoints[i].x, bodyPoints[i].y);
+                else ctx.lineTo(bodyPoints[i].x, bodyPoints[i].y);
+
+                ctx.fillStyle = "#ffcc00";
+                ctx.beginPath();
