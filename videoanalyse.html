@@ -3,34 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Badminton Videoanalyse Pro</title>
+    <title>Badminton AI Coach - Full Suite</title>
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background: #121212;
-            color: white;
+            font-family: 'Courier New', Courier, monospace;
+            background: #09090b;
+            color: #f4f4f5;
             text-align: center;
             padding: 20px;
             margin: 0;
         }
         .container {
-            max-width: 900px;
+            max-width: 1200px;
             margin: auto;
+        }
+        h1 {
+            color: #00ffcc;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            color: #a1a1aa;
+            margin-bottom: 20px;
+        }
+        .main-layout {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
         }
         .video-wrapper {
             position: relative;
-            display: inline-block;
             background: #000;
-            border-radius: 8px;
+            border-radius: 12px;
             overflow: hidden;
-            border: 3px solid #333;
-            margin-top: 15px;
+            border: 3px solid #1e1e24;
+            box-shadow: 0 0 25px rgba(0, 255, 204, 0.15);
         }
         video {
             display: block;
             max-width: 100%;
             height: auto;
-            max-height: 70vh;
+            max-height: 60vh;
         }
         canvas {
             position: absolute;
@@ -40,64 +56,133 @@
             height: 100%;
             cursor: crosshair;
         }
-        .toolbar {
-            background: #1e1e1e;
+        .dashboard {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 320px;
+        }
+        .panel {
+            background: #111115;
+            border: 2px solid #1e1e24;
+            border-radius: 12px;
             padding: 15px;
-            border-radius: 8px;
-            margin-top: 15px;
+            text-align: left;
+        }
+        .panel-title {
+            color: #ffcc00;
+            font-weight: bold;
+            font-size: 0.9em;
+            border-bottom: 1px solid #27272a;
+            padding-bottom: 5px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .data-item {
+            font-size: 0.85em;
+            margin: 5px 0;
+            color: #a1a1aa;
+        }
+        .value-highlight {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #00ffcc;
+            margin-top: 5px;
+        }
+        .toolbar {
+            background: #111115;
+            padding: 15px;
+            border-radius: 12px;
+            margin-top: 20px;
             display: flex;
             flex-wrap: wrap;
             justify-content: center;
             gap: 10px;
+            border: 1px solid #1e1e24;
         }
         button, select, input[type="file"] {
-            background: #333;
+            background: #1e1e24;
             color: white;
-            border: none;
+            border: 1px solid #3f3f46;
             padding: 10px 15px;
-            border-radius: 5px;
+            border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
+            font-family: inherit;
         }
-        button:hover {
-            background: #444;
+        button:hover, select:hover {
+            background: #27272a;
+            border-color: #00ffcc;
         }
-        .status-bar {
-            color: #00ffcc;
+        .mode-indicator {
+            color: #ff3366;
             font-weight: bold;
-            margin: 10px 0;
+            font-size: 0.85em;
+            margin-bottom: 10px;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>🏸 Badminton Videoanalyse Tool</h1>
-    <p>Video hochladen, Abspielgeschwindigkeit anpassen oder pausieren und Linien/Winkel direkt auf das Bild zeichnen.</p>
+    <h1>⚡ BADMINTON AI COACH: MULTI-EPISODE SUITE</h1>
+    <div class="subtitle">Interaktives Tracking inspiriert von vhofit. Pausiere dein Video am Keyframe.</div>
 
     <div>
         <input type="file" id="fileInput" accept="video/*, .mov">
+        <select id="shotTypeSelect" style="margin-left: 10px;">
+            <option value="Smash">🏸 Schlagtyp: SMASH</option>
+            <option value="Clear">🏸 Schlagtyp: CLEAR</option>
+            <option value="Drop">🏸 Schlagtyp: DROP</option>
+        </select>
     </div>
 
-    <div class="video-wrapper">
-        <video id="video" playsinline></video>
-        <canvas id="canvas"></canvas>
+    <div class="main-layout">
+        <!-- Video & Zeichen-Arbeitsplatz -->
+        <div class="video-wrapper">
+            <video id="video" playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+
+        <!-- Dashboard mit allen Analyse-Modulen -->
+        <div class="dashboard">
+            <!-- Teil 1 & 2 Panel -->
+            <div class="panel">
+                <div class="panel-title">📐 EP. 1&2: Coordinates & Angles</div>
+                <div id="modeStatus" class="mode-indicator">Bitte klicke auf die SCHULTER</div>
+                <div id="coordData"></div>
+                <div class="value-highlight" id="angleData">--°</div>
+            </div>
+
+            <!-- Teil 5 Panel -->
+            <div class="panel">
+                <div class="panel-title">🚀 EP. 5: Shuttle Speed & Flight</div>
+                <div class="data-item" id="shuttleCoords">Shuttle-Position: Ausstehend</div>
+                <div class="data-item">Errechnete Initialgeschwindigkeit:</div>
+                <div class="value-highlight" id="speedData" style="color: #ffcc00;">-- km/h</div>
+            </div>
+
+            <!-- Teil 3 & 4 Panel -->
+            <div class="panel">
+                <div class="panel-title">📊 EP. 3&4: Field Metrics</div>
+                <div class="data-item" id="classificationReport">Klassifizierung: Manuell</div>
+                <div class="data-item" id="heatMapStatus">Spielfeldzone: Keine Daten</div>
+            </div>
+        </div>
     </div>
 
-    <div class="status-bar" id="statusBar">Bereit. Bitte lade ein Video hoch.</div>
-
+    <!-- Steuerung -->
     <div class="toolbar">
-        <button id="playBtn">▶ Play</button>
+        <button id="playBtn">▶ Play / Pause</button>
         <button id="prevFrame">◀ Frame zurück</button>
         <button id="nextFrame">Frame vor ▶</button>
-        
         <select id="speedSelect">
             <option value="1">Normal (1x)</option>
             <option value="0.5">Slow-Mo (0.5x)</option>
             <option value="0.25" selected>Slow-Mo (0.25x)</option>
         </select>
-
-        <button id="clearBtn" style="background: #ff3333;">❌ Zeichnung löschen</button>
+        <button id="clearBtn" style="background: #7f1d1d; border-color: #ef4444;">❌ Reset Analytics</button>
     </div>
 </div>
 
@@ -106,27 +191,34 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const fileInput = document.getElementById('fileInput');
-    const statusBar = document.getElementById('statusBar');
+    const shotTypeSelect = document.getElementById('shotTypeSelect');
     
+    // Panel Elements
+    const modeStatus = document.getElementById('modeStatus');
+    const coordData = document.getElementById('coordData');
+    const angleData = document.getElementById('angleData');
+    const shuttleCoords = document.getElementById('shuttleCoords');
+    const speedData = document.getElementById('speedData');
+    const classificationReport = document.getElementById('classificationReport');
+    const heatMapStatus = document.getElementById('heatMapStatus');
+
+    // Controls
     const playBtn = document.getElementById('playBtn');
     const prevFrame = document.getElementById('prevFrame');
     const nextFrame = document.getElementById('nextFrame');
     const speedSelect = document.getElementById('speedSelect');
     const clearBtn = document.getElementById('clearBtn');
 
-    let isDrawing = false;
-    let lines = []; 
+    let bodyPoints = []; 
+    let shuttlePoint = null;
+    const bodyLabels = ["Schulter", "Hüfte", "Knie", "Fuß"];
 
-    // 1. Video laden
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files;
-        if (file && file[0]) {
-            const fileURL = URL.createObjectURL(file[0]);
-            video.src = fileURL;
+        const file = e.target.files[0];
+        if (file) {
+            video.src = URL.createObjectURL(file);
             video.load();
-            statusBar.innerText = "Video erfolgreich geladen! Nutze die Tasten unten zum Steuern.";
-            lines = [];
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            resetAllMetrics();
         }
     });
 
@@ -136,92 +228,56 @@
         video.playbackRate = parseFloat(speedSelect.value);
     });
 
-    window.addEventListener('resize', () => {
-        if(video.videoWidth) {
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            redrawCanvas();
-        }
-    });
+    playBtn.addEventListener('click', () => { if (video.paused) video.play(); else video.pause(); });
+    speedSelect.addEventListener('change', () => { video.playbackRate = parseFloat(speedSelect.value); });
+    prevFrame.addEventListener('click', () => { video.pause(); video.currentTime = Math.max(0, video.currentTime - 0.04); });
+    nextFrame.addEventListener('click', () => { video.pause(); video.currentTime = Math.min(video.duration, video.currentTime + 0.04); });
 
-    // 2. Video-Steuerung
-    playBtn.addEventListener('click', () => {
-        if (video.paused) {
-            video.play();
-            playBtn.innerText = "⏸ Pause";
-        } else {
-            video.pause();
-            playBtn.innerText = "▶ Play";
-        }
-    });
-
-    speedSelect.addEventListener('change', () => {
-        video.playbackRate = parseFloat(speedSelect.value);
-    });
-
-    prevFrame.addEventListener('click', () => {
-        video.pause();
-        playBtn.innerText = "▶ Play";
-        video.currentTime = Math.max(0, video.currentTime - 0.04);
-    });
-
-    nextFrame.addEventListener('click', () => {
-        video.pause();
-        playBtn.innerText = "▶ Play";
-        video.currentTime = Math.min(video.duration, video.currentTime + 0.04);
-    });
-
-    // 3. Manuelles Zeichen-System
-    function getMousePos(e) {
-        const rect = canvas.getBoundingClientRect();
-        return {
-            x: ((e.clientX - rect.left) / rect.width) * canvas.width,
-            y: ((e.clientY - rect.top) / rect.height) * canvas.height
-        };
-    }
-
+    // Intelligente Klick-Erfassung (Verarbeitet Körper- und Ballpunkte)
     canvas.addEventListener('mousedown', (e) => {
         if (!video.src) return;
-        isDrawing = true;
-        const pos = getMousePos(e);
-        lines.push([{ x: pos.x, y: pos.y }]);
+
+        const rect = canvas.getBoundingClientRect();
+        const posX = ((e.clientX - rect.left) / rect.width) * canvas.width;
+        const posY = ((e.clientY - rect.top) / rect.height) * canvas.height;
+
+        if (bodyPoints.length < 4) {
+            // Punkte 1-4: Skelett-Aufbau
+            bodyPoints.push({ x: posX, y: posY, label: bodyLabels[bodyPoints.length] });
+        } else if (!shuttlePoint) {
+            // Punkt 5: Federball-Position für Geschwindigkeitsmessung
+            shuttlePoint = { x: posX, y: posY };
+        }
+        
+        renderCalculations();
     });
 
-    canvas.addEventListener('mousemove', (e) => {
-        if (!isDrawing) return;
-        const pos = getMousePos(e);
-        const currentLine = lines[lines.length - 1];
-        currentLine.push({ x: pos.x, y: pos.y });
-        redrawCanvas();
-    });
-
-    window.addEventListener('mouseup', () => {
-        isDrawing = false;
-    });
-
-    function redrawCanvas() {
+    function renderCalculations() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = "#00ffcc"; 
-        ctx.lineWidth = 5;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
+        coordData.innerHTML = "";
 
-        lines.forEach(line => {
-            if (line.length < 2) return;
+        // --- TEIL 1 & 2: SKELETT-ZEICHNUNG ---
+        if (bodyPoints.length > 0) {
+            ctx.lineWidth = 5;
+            ctx.lineCap = "round";
+
             ctx.beginPath();
-            ctx.moveTo(line[0].x, line[0].y);
-            for (let i = 1; i < line.length; i++) {
-                ctx.lineTo(line[i].x, line[i].y);
-            }
-            ctx.stroke();
-        });
-    }
+            ctx.strokeStyle = "#ff3366"; // Oberkörper-Farbe
+            
+            for (let i = 0; i < bodyPoints.length; i++) {
+                if (i === 2) {
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.strokeStyle = "#00ffcc"; // Beinarbeits-Farbe wechselt wie bei vhofit
+                    ctx.moveTo(bodyPoints[i-1].x, bodyPoints[i-1].y);
+                }
 
-    clearBtn.addEventListener('click', () => {
-        lines = [];
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-    });
-</script>
+                if (i === 0) ctx.moveTo(bodyPoints[i].x, bodyPoints[i].y);
+                else ctx.lineTo(bodyPoints[i].x, bodyPoints[i].y);
 
-</body>
-</html>
+                // Gelenke einzeichnen
+                ctx.fillStyle = "#ffcc00";
+                ctx.beginPath();
+                ctx.arc(bodyPoints[i].x, bodyPoints[i].y, 8, 0, 2 * Math.PI);
+                ctx.fill();
+
