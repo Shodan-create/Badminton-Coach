@@ -274,6 +274,7 @@
 </div>
 
 <script>
+  <script>
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
@@ -293,23 +294,30 @@
     const nextFrame = document.getElementById('nextFrame');
     const speedSelect = document.getElementById('speedSelect');
     const clearBtn = document.getElementById('clearBtn');
+
     let bodyPoints = []; 
     let shuttlePoint = null;
     const bodyLabels = ["Schulter", "Hüfte", "Knie", "Fuß"];
 
+    // UNKAPUTTBARER APPLE & CORS FIX: Lädt das Video als direkten Datenstream
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files[0]; // Greift stabil auf die erste Datei zu
         if (file) {
-            modeStatus.innerText = "STATUS: LADE MEDIENDATEI...";
+            modeStatus.innerText = "STATUS: KONVERTIERE VIDEOSTREAM...";
             modeStatus.style.color = "var(--neon-yellow)";
-            video.src = URL.createObjectURL(file);
-            video.load();
+            
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                video.src = event.target.result;
+                video.load();
+            };
+            reader.readAsDataURL(file);
         }
     });
 
-    video.addEventListener('loadedmetadata', () => {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+    video.addEventListener('loadeddata', () => {
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 360;
         video.playbackRate = parseFloat(speedSelect.value);
         resetAllMetrics();
         modeStatus.innerText = "STATUS: KLICKE AUF DIE SCHULTER";
@@ -339,7 +347,9 @@
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         try {
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        } catch(e) {}
+        } catch(e) {
+            console.error("Render-Fehler:", e);
+        }
         renderOverlay();
     }
 
@@ -352,7 +362,7 @@
         video.pause(); 
         playBtn.innerText = "▶ PLAY";
         video.currentTime = Math.max(0, video.currentTime - 0.04);
-        setTimeout(drawVideoFrame, 20);
+        setTimeout(drawVideoFrame, 40);
     });
     
     nextFrame.addEventListener('click', () => { 
@@ -360,7 +370,7 @@
         video.pause(); 
         playBtn.innerText = "▶ PLAY";
         video.currentTime = Math.min(video.duration, video.currentTime + 0.04);
-        setTimeout(drawVideoFrame, 20);
+        setTimeout(drawVideoFrame, 40);
     });
 
     canvas.addEventListener('mousedown', (e) => {
