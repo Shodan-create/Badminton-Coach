@@ -45,7 +45,14 @@
             height: 360px;
         }
         video {
-            display: none; /* Wir verstecken den fehlerhaften Browser-Player komplett! */
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            background: #000;
+            z-index: 1;
         }
         canvas {
             position: absolute;
@@ -54,6 +61,7 @@
             width: 100%;
             height: 100%;
             cursor: crosshair;
+            z-index: 2;
         }
         .dashboard {
             display: flex;
@@ -128,26 +136,28 @@
     <h1>⚡ BADMINTON AI COACH: MULTI-EPISODE SUITE</h1>
     <div class="subtitle">Interaktives Tracking inspiriert von vhofit. Pausiere dein Video am Keyframe.</div>
 
-    <div>
+    <div style="margin-bottom: 15px;">
         <input type="file" id="fileInput" accept="video/*, .mov, .mp4">
         <select id="shotTypeSelect" style="margin-left: 10px;">
             <option value="Smash">🏸 Schlagtyp: SMASH</option>
             <option value="Clear">🏸 Schlagtyp: CLEAR</option>
             <option value="Drop">🏸 Schlagtyp: DROP</option>
         </select>
+        <!-- Notfall-Button für Demovideo -->
+        <button id="demoBtn" style="background: #0284c7; border-color: #38bdf8; margin-left: 10px;">▶ Demo-Video laden</button>
     </div>
 
     <div class="main-layout">
         <div class="video-wrapper">
-            <!-- Das Canvas übernimmt jetzt das Rendern des Videobildes vollautomatisch -->
-            <video id="video" playsinline></video>
+            <!-- Nativer Player, damit CORS-Sicherheitsfehler unmöglich sind -->
+            <video id="video" controls playsinline crossorigin="anonymous"></video>
             <canvas id="canvas"></canvas>
         </div>
 
         <div class="dashboard">
             <div class="panel">
                 <div class="panel-title">📐 EP. 1&2: Coordinates & Angles</div>
-                <div id="modeStatus" class="mode-indicator">Bitte lade ein Video hoch</div>
+                <div id="modeStatus" class="mode-indicator">Bitte lade ein Video hoch oder nutze das Demo-Video</div>
                 <div id="coordData"></div>
                 <div class="value-highlight" id="angleData">--°</div>
             </div>
@@ -186,6 +196,7 @@
     const ctx = canvas.getContext('2d');
     const fileInput = document.getElementById('fileInput');
     const shotTypeSelect = document.getElementById('shotTypeSelect');
+    const demoBtn = document.getElementById('demoBtn');
     
     const modeStatus = document.getElementById('modeStatus');
     const coordData = document.getElementById('coordData');
@@ -205,8 +216,9 @@
     let shuttlePoint = null;
     const bodyLabels = ["Schulter", "Hüfte", "Knie", "Fuß"];
 
+    // 1. Lokales Video hochladen
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0]; // Greift direkt auf das File-Objekt zu
+        const file = e.target.files[0];
         if (file) {
             const fileURL = URL.createObjectURL(file);
             video.src = fileURL;
@@ -214,54 +226,31 @@
         }
     });
 
-    video.addEventListener('loadedmetadata', () => {
+    // 2. Erzwungenes Web-Demovideo laden, falls lokale Dateien blockiert werden
+    demoBtn.addEventListener('click', () => {
+        // Lädt ein standardisiertes offizielle MP4-Testvideo aus dem Web
+        video.src = "https://googleapis.com";
+        video.load();
+    });
+
+    video.addEventListener('loadeddata', () => {
         const wrapper = document.querySelector('.video-wrapper');
         const aspectRatio = video.videoWidth / video.videoHeight;
         wrapper.style.height = (640 / aspectRatio) + 'px';
         
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
+        canvas.width = 640;
+        canvas.height = 640 / aspectRatio;
         
         video.playbackRate = parseFloat(speedSelect.value);
         resetAllMetrics();
         modeStatus.innerText = "Bitte klicke auf die SCHULTER";
         modeStatus.style.color = "#ff3366";
-        
-        // Zeichne sofort das allererste Bild des Videos auf das Canvas
-        setTimeout(() => {
-            renderCalculations();
-        }, 150);
     });
 
-    playBtn.addEventListener('click', () => { 
-        if (video.paused) {
-            video.play();
-            updateVideoLoop();
-        } else {
-            video.pause();
-        }
-    });
-
-    // Kontinuierlicher Render-Loop, um das Video flüssig auf das Canvas zu zeichnen
-    function updateVideoLoop() {
-        if (video.paused || video.ended) return;
-        renderCalculations();
-        requestAnimationFrame(updateVideoLoop);
-    }
-
+    playBtn.addEventListener('click', () => { if (video.paused) video.play(); else video.pause(); });
     speedSelect.addEventListener('change', () => { video.playbackRate = parseFloat(speedSelect.value); });
-    
-    prevFrame.addEventListener('click', () => { 
-        video.pause(); 
-        video.currentTime = Math.max(0, video.currentTime - 0.04);
-        setTimeout(renderCalculations, 10);
-    });
-    
-    nextFrame.addEventListener('click', () => { 
-        video.pause(); 
-        video.currentTime = Math.min(video.duration, video.currentTime + 0.04);
-        setTimeout(renderCalculations, 10);
-    });
+    prevFrame.addEventListener('click', () => { video.pause(); video.currentTime = Math.max(0, video.currentTime - 0.04); setTimeout(renderCalculations, 10); });
+    nextFrame.addEventListener('click', () => { video.pause(); video.currentTime = Math.min(video.duration, video.currentTime + 0.04); setTimeout(renderCalculations, 10); });
 
     canvas.addEventListener('mousedown', (e) => {
         if (!video.src) return;
@@ -280,14 +269,10 @@
     });
 
     function renderCalculations() {
-        // 1. SCHRITT: Zeichne das aktuelle Video-Frame direkt auf das Canvas
-        if (video.readyState >= 2) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        } else {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-        }
-        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         coordData.innerHTML = "";
 
-        // 2. SCHRITT: Zeichne die Linien und Gelenke darüber
         if (bodyPoints.length > 0) {
+            ctx.lineWidth = 5;
+            ctx.lineCap = "round";
+            ctx.beginPath();
