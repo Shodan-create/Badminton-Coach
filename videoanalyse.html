@@ -41,11 +41,14 @@
             overflow: hidden;
             border: 3px solid #1e1e24;
             box-shadow: 0 0 25px rgba(0, 255, 204, 0.15);
-            width: 640px;
-            height: 360px;
+            width: 100%;
+            max-width: 640px;
         }
         video {
-            display: none; /* Wir verstecken den fehlerhaften Player komplett */
+            display: block;
+            width: 100%;
+            height: auto;
+            background: #000;
         }
         canvas {
             position: absolute;
@@ -54,6 +57,7 @@
             width: 100%;
             height: 100%;
             cursor: crosshair;
+            z-index: 10; /* Liegt garantiert über dem Video */
         }
         .dashboard {
             display: flex;
@@ -140,7 +144,8 @@
 
     <div class="main-layout">
         <div class="video-wrapper">
-            <video id="video" playsinline crossorigin="anonymous"></video>
+            <!-- Das Video ist jetzt ganz normal SICHTBAR, das Canvas liegt als Folie darüber -->
+            <video id="video" playsinline></video>
             <canvas id="canvas"></canvas>
         </div>
 
@@ -206,65 +211,48 @@
     let shuttlePoint = null;
     const bodyLabels = ["Schulter", "Hüfte", "Knie", "Fuß"];
 
+    // 1. Eigenes Video laden
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files[0]; // Korrekter Indexzugriff fixiert
         if (file) {
             video.src = URL.createObjectURL(file);
             video.load();
         }
     });
 
+    // 2. Offizielles, unblockiertes Web-Video laden
     demoBtn.addEventListener('click', () => {
+        video.removeAttribute('crossorigin'); // Entfernt CORS-Hürden
         video.src = "https://googleapis.com";
         video.load();
     });
 
+    // Passt das Canvas exakt an die wirkliche Video-Größe an
     video.addEventListener('loadedmetadata', () => {
-        const wrapper = document.querySelector('.video-wrapper');
-        const aspectRatio = video.videoWidth / video.videoHeight;
-        wrapper.style.height = (640 / aspectRatio) + 'px';
-        
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        
         video.playbackRate = parseFloat(speedSelect.value);
         resetAllMetrics();
         modeStatus.innerText = "Bitte klicke auf die SCHULTER";
         modeStatus.style.color = "#ff3366";
-        
-        // Zeichne sofort das erste Bild auf das Canvas
-        setTimeout(renderCalculations, 200);
     });
 
-    playBtn.addEventListener('click', () => { 
-        if (video.paused) {
-            video.play();
-            renderLoop();
-        } else {
-            video.pause();
-        }
-    });
-
-    function renderLoop() {
-        if (video.paused || video.ended) return;
-        renderCalculations();
-        requestAnimationFrame(renderLoop);
-    }
-
+    playBtn.addEventListener('click', () => { if (video.paused) video.play(); else video.pause(); });
     speedSelect.addEventListener('change', () => { video.playbackRate = parseFloat(speedSelect.value); });
     
     prevFrame.addEventListener('click', () => { 
         video.pause(); 
         video.currentTime = Math.max(0, video.currentTime - 0.04); 
-        setTimeout(renderCalculations, 30); 
+        setTimeout(renderCalculations, 10); 
     });
     
     nextFrame.addEventListener('click', () => { 
         video.pause(); 
         video.currentTime = Math.min(video.duration, video.currentTime + 0.04); 
-        setTimeout(renderCalculations, 30); 
+        setTimeout(renderCalculations, 10); 
     });
 
+    // Klicks relativ zur echten Video-Auflösung umrechnen
     canvas.addEventListener('mousedown', (e) => {
         if (!video.src) return;
 
@@ -282,9 +270,12 @@
     });
 
     function renderCalculations() {
-        // Zeichnet das Videobild direkt als Grafik auf das Canvas
-        if (video.readyState >= 2) {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        } else {
-            ctx.fillStyle = "#000000";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        coordData.innerHTML = "";
+
+        if (bodyPoints.length > 0) {
+            ctx.lineWidth = Math.max(4, canvas.width / 150); // Skalierte Linienbreite
+            ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.strokeStyle = "#ff3366";
+            
