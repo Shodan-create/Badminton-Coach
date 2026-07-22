@@ -57,11 +57,10 @@
             width: 100%;
             height: 100%;
             z-index: 5;
-            /* Drückt Klicks durch das Canvas zum Video, wenn wir nicht im Analysemodus sind */
             pointer-events: none; 
         }
         canvas.active-mode {
-            pointer-events: auto; /* Aktiviert das Klicken für die Punkte */
+            pointer-events: auto; 
             cursor: crosshair;
         }
         .dashboard {
@@ -139,28 +138,28 @@
 
 <div class="container">
     <h1>⚡ BADMINTON AI COACH: MULTI-EPISODE SUITE</h1>
-    <div class="subtitle">Nutze den normalen Player. Pausiere das Video und klicke auf "Analyse-Modus starten", um Gelenke zu tracken.</div>
+    <div class="subtitle">Nutze die Knöpfe unten zur Steuerung. Pausiere das Video und aktiviere den Analyse-Modus.</div>
 
     <div style="margin-bottom: 15px;">
         <input type="file" id="fileInput" accept="video/*, .mov, .mp4">
         <select id="shotTypeSelect" style="margin-left: 10px;">
-            <option value="Smash">命 Schlagtyp: SMASH</option>
-            <option value="Clear">命 Schlagtyp: CLEAR</option>
-            <option value="Drop">命 Schlagtyp: DROP</option>
+            <option value="Smash">🏸 Schlagtyp: SMASH</option>
+            <option value="Clear">🏸 Schlagtyp: CLEAR</option>
+            <option value="Drop">🏸 Schlagtyp: DROP</option>
         </select>
     </div>
 
     <div class="main-layout">
         <div class="video-wrapper">
-            <!-- Nativer Browserplayer mit Steuerungsleiste - lädt IMMER -->
-            <video id="video" controls playsinline></video>
+            <!-- Ohne "controls", damit die Leiste nicht verbuggt - wir steuern über eigene Buttons unten -->
+            <video id="video" playsinline></video>
             <canvas id="canvas"></canvas>
         </div>
 
         <div class="dashboard">
             <div class="panel">
                 <div class="panel-title">📐 EP. 1&2: Coordinates & Angles</div>
-                <div id="modeStatus" class="mode-indicator" style="color: #a1a1aa;">Video hochladen & Pause drücken</div>
+                <div id="modeStatus" class="mode-indicator" style="color: #a1a1aa;">Video hochladen & Steuerung unten nutzen</div>
                 <div id="coordData"></div>
                 <div class="value-highlight" id="angleData">--°</div>
             </div>
@@ -180,8 +179,16 @@
         </div>
     </div>
 
+    <!-- Das unkaputtbare Kontrollzentrum -->
     <div class="toolbar">
-        <!-- Dieser Button schaltet das Canvas scharf -->
+        <button id="playBtn">▶ Play / Pause</button>
+        <button id="prevFrame">◀ Frame zurück</button>
+        <button id="nextFrame">Frame vor ▶</button>
+        <select id="speedSelect">
+            <option value="1">Normal (1x)</option>
+            <option value="0.5">Slow-Mo (0.5x)</option>
+            <option value="0.25" selected>Slow-Mo (0.25x)</option>
+        </select>
         <button id="toggleModeBtn" class="btn-mode">🎯 Analyse-Modus aktivieren</button>
         <button id="clearBtn" style="background: #7f1d1d; border-color: #ef4444;">❌ Reset Analytics</button>
     </div>
@@ -204,15 +211,20 @@
     const heatMapStatus = document.getElementById('heatMapStatus');
     const clearBtn = document.getElementById('clearBtn');
 
+    const playBtn = document.getElementById('playBtn');
+    const prevFrame = document.getElementById('prevFrame');
+    const nextFrame = document.getElementById('nextFrame');
+    const speedSelect = document.getElementById('speedSelect');
+
     let bodyPoints = []; 
     let shuttlePoint = null;
     let analysisModeActive = false;
     const bodyLabels = ["Schulter", "Hüfte", "Knie", "Fuß"];
 
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            video.src = URL.createObjectURL(file);
+        const file = e.target.files;
+        if (file && file[0]) {
+            video.src = URL.createObjectURL(file[0]);
             video.load();
         }
     });
@@ -220,18 +232,49 @@
     video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
+        video.playbackRate = parseFloat(speedSelect.value);
         resetAllMetrics();
     });
 
-    // Schaltet das Zeichenfeld ein oder aus, damit der Player nicht blockiert wird
-    toggleModeBtn.addEventListener('click', () => {
+    // Echte Button-Steuerung für Play/Pause
+    playBtn.addEventListener('click', () => {
         if(!video.src) return;
-        video.pause(); // Video anhalten für die Analyse
+        if (video.paused) {
+            if(analysisModeActive) toggleAnalysisMode(); // Deaktiviert Analyse beim Abspielen
+            video.play();
+            playBtn.innerText = "⏸ Pause";
+        } else {
+            video.pause();
+            playBtn.innerText = "▶ Play";
+        }
+    });
+
+    speedSelect.addEventListener('change', () => { 
+        video.playbackRate = parseFloat(speedSelect.value); 
+    });
+
+    // Frame-by-Frame Knöpfe
+    prevFrame.addEventListener('click', () => { 
+        if(!video.src) return;
+        video.pause(); 
+        playBtn.innerText = "▶ Play";
+        video.currentTime = Math.max(0, video.currentTime - 0.04); 
+    });
+    
+    nextFrame.addEventListener('click', () => { 
+        if(!video.src) return;
+        video.pause(); 
+        playBtn.innerText = "▶ Play";
+        video.currentTime = Math.min(video.duration, video.currentTime + 0.04); 
+    });
+
+    function toggleAnalysisMode() {
         analysisModeActive = !analysisModeActive;
-        
         if(analysisModeActive) {
+            video.pause();
+            playBtn.innerText = "▶ Play";
             canvas.classList.add('active-mode');
-            toggleModeBtn.innerText = "⏸ Player freigeben";
+            toggleModeBtn.innerText = "🔓 Player freigeben";
             toggleModeBtn.style.background = "#15803d";
             toggleModeBtn.style.borderColor = "#22c55e";
             modeStatus.innerText = "ANALYSE AKTIV: Klicke auf die SCHULTER";
@@ -241,47 +284,5 @@
             toggleModeBtn.innerText = "🎯 Analyse-Modus aktivieren";
             toggleModeBtn.style.background = "#7c2d12";
             toggleModeBtn.style.borderColor = "#ea580c";
-            modeStatus.innerText = "Modus inaktiv. Video abspielbar.";
+            modeStatus.innerText = "Modus inaktiv. Video bereit.";
             modeStatus.style.color = "#a1a1aa";
-        }
-    });
-
-    canvas.addEventListener('mousedown', (e) => {
-        if (!analysisModeActive) return;
-
-        const rect = canvas.getBoundingClientRect();
-        const posX = ((e.clientX - rect.left) / rect.width) * canvas.width;
-        const posY = ((e.clientY - rect.top) / rect.height) * canvas.height;
-
-        if (bodyPoints.length < 4) {
-            bodyPoints.push({ x: posX, y: posY, label: bodyLabels[bodyPoints.length] });
-        } else if (!shuttlePoint) {
-            shuttlePoint = { x: posX, y: posY };
-        }
-        
-        renderCalculations();
-    });
-
-    function renderCalculations() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        coordData.innerHTML = "";
-
-        if (bodyPoints.length > 0) {
-            ctx.lineWidth = Math.max(4, canvas.width / 150);
-            ctx.lineCap = "round";
-            ctx.beginPath();
-            ctx.strokeStyle = "#ff3366";
-            
-            for (let i = 0; i < bodyPoints.length; i++) {
-                if (i === 2) {
-                    ctx.stroke();
-                    ctx.beginPath();
-                    ctx.strokeStyle = "#00ffcc";
-                    ctx.moveTo(bodyPoints[i-1].x, bodyPoints[i-1].y);
-                }
-
-                if (i === 0) ctx.moveTo(bodyPoints[i].x, bodyPoints[i].y);
-                else ctx.lineTo(bodyPoints[i].x, bodyPoints[i].y);
-
-                ctx.fillStyle = "#ffcc00";
-                ctx.beginPath();
