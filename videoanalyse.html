@@ -138,7 +138,7 @@
 
 <div class="container">
     <h1>⚡ BADMINTON AI COACH: MULTI-EPISODE SUITE</h1>
-    <div class="subtitle">Nutze die Knöpfe unten zur Steuerung. Pausiere das Video und aktiviere den Analyse-Modus.</div>
+    <div class="subtitle">Nutze den normalen Player. Pausiere das Video und aktiviere den Analyse-Modus.</div>
 
     <div style="margin-bottom: 15px;">
         <input type="file" id="fileInput" accept="video/*, .mov, .mp4">
@@ -151,7 +151,7 @@
 
     <div class="main-layout">
         <div class="video-wrapper">
-            <!-- Nativer Browserplayer, der über das neue Blob-System gefüttert wird -->
+            <!-- Nativer Browserplayer mit Leiste - die unkaputtbare Basis -->
             <video id="video" controls playsinline></video>
             <canvas id="canvas"></canvas>
         </div>
@@ -159,7 +159,7 @@
         <div class="dashboard">
             <div class="panel">
                 <div class="panel-title">📐 EP. 1&2: Coordinates & Angles</div>
-                <div id="modeStatus" class="mode-indicator" style="color: #a1a1aa;">Bitte wähle ein Video aus</div>
+                <div id="modeStatus" class="mode-indicator" style="color: #a1a1aa;">Video hochladen & Pause drücken</div>
                 <div id="coordData"></div>
                 <div class="value-highlight" id="angleData">--°</div>
             </div>
@@ -207,31 +207,21 @@
     let analysisModeActive = false;
     const bodyLabels = ["Schulter", "Hüfte", "Knie", "Fuß"];
 
-    // Das unkaputtbare Datenpaket-Ladesystem (Zwingt iPhone-Formate zum Abspielen)
+    // Zurück zum ultraschnellen, speicherschonenden Ladesystem
     fileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
+        const file = e.target.files[0]; // Holt die Datei ohne Speicherüberlastung
         if (file) {
-            modeStatus.innerText = "Video wird für den Browser vorbereitet...";
-            modeStatus.style.color = "#ffcc00";
-
-            const reader = new FileReader();
-            reader.onload = function(event) {
-                // Wandelt das Video in ein universelles Web-Datenpaket um
-                const buffer = event.target.result;
-                const videoBlob = new Blob([new Uint8Array(buffer)], { type: 'video/mp4' });
-                video.src = URL.createObjectURL(videoBlob);
-                video.load();
-            };
-            reader.readAsArrayBuffer(file);
+            video.src = URL.createObjectURL(file);
+            video.load();
         }
     });
 
     video.addEventListener('loadedmetadata', () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        video.playbackRate = 0.25; // Automatisch in 0.25x Zeitlupe für präzise Badminton-Analysen
+        video.playbackRate = 0.25; // Automatische Zeitlupe für perfekte Badminton-Bilder
         resetAllMetrics();
-        modeStatus.innerText = "Video bereit! Pausiere am Schlag und aktiviere den Analyse-Modus.";
+        modeStatus.innerText = "Video bereit! Pausiere am Schlag und starte den Analyse-Modus.";
         modeStatus.style.color = "#00ffcc";
     });
 
@@ -245,6 +235,9 @@
             toggleModeBtn.style.borderColor = "#22c55e";
             modeStatus.innerText = "ANALYSE AKTIV: Klicke auf die SCHULTER";
             modeStatus.style.color = "#ff3366";
+            
+            // Schiebt das Canvas ein Stück nach oben, damit es nicht die Player-Leiste blockiert
+            canvas.style.height = (video.offsetHeight - 45) + 'px';
         } else {
             canvas.classList.remove('active-mode');
             toggleModeBtn.innerText = "🎯 Analyse-Modus aktivieren";
@@ -252,6 +245,7 @@
             toggleModeBtn.style.borderColor = "#ea580c";
             modeStatus.innerText = "Modus inaktiv. Video freigegeben.";
             modeStatus.style.color = "#a1a1aa";
+            canvas.style.height = '100%';
         }
     }
 
@@ -283,3 +277,11 @@
         if (bodyPoints.length > 0) {
             ctx.lineWidth = Math.max(4, canvas.width / 150);
             ctx.lineCap = "round";
+            ctx.beginPath();
+            ctx.strokeStyle = "#ff3366";
+            
+            for (let i = 0; i < bodyPoints.length; i++) {
+                if (i === 2) {
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.strokeStyle = "#00ffcc";
