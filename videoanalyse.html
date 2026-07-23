@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="de">
+
 <head>
+
 <meta charset="UTF-8">
 
 <meta
@@ -10,24 +12,32 @@
 
 <title>Badminton Coach – KI Videoanalyse</title>
 
-<!-- TensorFlow.js -->
+
+<!-- =====================================================
+     TENSORFLOW.JS
+===================================================== -->
+
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
 
-<!-- TensorFlow Pose Detection -->
-<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
-
-<!-- MoveNet / TensorFlow Backend -->
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.22.0/dist/tf-backend-webgl.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
 
 
 <style>
+
+/* =====================================================
+   GRUNDLAYOUT
+===================================================== */
 
 * {
   box-sizing: border-box;
 }
 
 body {
+
   margin: 0;
+
   min-height: 100vh;
 
   background:
@@ -45,15 +55,26 @@ body {
     sans-serif;
 
   padding: 20px;
+
 }
 
 .container {
+
   width: 100%;
+
   max-width: 1100px;
+
   margin: auto;
+
 }
 
+
+/* =====================================================
+   HEADER
+===================================================== */
+
 .back-button {
+
   display: inline-block;
 
   color: #CFE0D5;
@@ -63,33 +84,47 @@ body {
   margin-bottom: 20px;
 
   font-size: 14px;
+
 }
 
 .back-button:hover {
+
   color: #D9AA3E;
+
 }
 
+
 .header {
+
   text-align: center;
+
   margin-bottom: 25px;
+
 }
 
 .header h1 {
+
   margin: 0 0 8px 0;
+
   font-size: 30px;
+
 }
 
 .header p {
+
   margin: 0;
+
   color: #CFE0D5;
+
 }
 
 
-/* =========================================
+/* =====================================================
    PANEL
-========================================= */
+===================================================== */
 
 .panel {
+
   background: #123C2D;
 
   border:
@@ -101,14 +136,16 @@ body {
   padding: 20px;
 
   margin-bottom: 20px;
+
 }
 
 
-/* =========================================
+/* =====================================================
    UPLOAD
-========================================= */
+===================================================== */
 
 .upload-area {
+
   text-align: center;
 
   padding: 25px;
@@ -118,13 +155,17 @@ body {
     rgba(248,246,240,0.25);
 
   border-radius: 12px;
+
 }
 
 .file-input {
+
   display: none;
+
 }
 
 .upload-button {
+
   display: inline-block;
 
   background: #D9AA3E;
@@ -142,16 +183,19 @@ body {
   cursor: pointer;
 
   margin-top: 12px;
+
 }
 
 .upload-button:hover {
+
   opacity: 0.9;
+
 }
 
 
-/* =========================================
+/* =====================================================
    VIDEO
-========================================= */
+===================================================== */
 
 .video-wrapper {
 
@@ -170,6 +214,7 @@ body {
   overflow: hidden;
 
   line-height: 0;
+
 }
 
 #video {
@@ -181,32 +226,30 @@ body {
   height: auto;
 
   background: black;
+
 }
 
-
-/*
-Das Canvas liegt exakt über dem Video.
-Hier werden Bounding Boxes,
-Gelenkpunkte und das Exoskelett gezeichnet.
-*/
 
 #overlay {
 
   position: absolute;
 
   left: 0;
+
   top: 0;
 
   width: 100%;
+
   height: 100%;
 
   pointer-events: none;
+
 }
 
 
-/* =========================================
+/* =====================================================
    CONTROLS
-========================================= */
+===================================================== */
 
 .controls {
 
@@ -217,6 +260,7 @@ Gelenkpunkte und das Exoskelett gezeichnet.
   flex-wrap: wrap;
 
   margin-top: 15px;
+
 }
 
 button {
@@ -232,6 +276,7 @@ button {
   font-size: 14px;
 
   font-weight: bold;
+
 }
 
 .primary {
@@ -241,6 +286,7 @@ button {
   color: #2B2005;
 
   border: none;
+
 }
 
 .secondary {
@@ -252,12 +298,13 @@ button {
   border:
     1px solid
     rgba(248,246,240,0.2);
+
 }
 
 
-/* =========================================
+/* =====================================================
    STATUS
-========================================= */
+===================================================== */
 
 .status {
 
@@ -273,16 +320,37 @@ button {
   color: #CFE0D5;
 
   font-size: 14px;
+
 }
 
 
-/* =========================================
-   ANALYSIS
-========================================= */
+/* =====================================================
+   LOADING
+===================================================== */
+
+.loading {
+
+  display: none;
+
+  text-align: center;
+
+  margin-top: 15px;
+
+  color: #D9AA3E;
+
+  font-weight: bold;
+
+}
+
+
+/* =====================================================
+   ANALYSE
+===================================================== */
 
 .analysis {
 
   display: none;
+
 }
 
 .analysis h2 {
@@ -290,6 +358,11 @@ button {
   margin-top: 0;
 
 }
+
+
+/* =====================================================
+   STATS
+===================================================== */
 
 .stats {
 
@@ -301,6 +374,7 @@ button {
   gap: 10px;
 
   margin-top: 15px;
+
 }
 
 .stat {
@@ -313,6 +387,7 @@ button {
   padding: 15px;
 
   text-align: center;
+
 }
 
 .stat-number {
@@ -322,6 +397,7 @@ button {
   font-weight: bold;
 
   color: #D9AA3E;
+
 }
 
 .stat-label {
@@ -331,12 +407,13 @@ button {
   color: #CFE0D5;
 
   margin-top: 4px;
+
 }
 
 
-/* =========================================
-   PLAYER LIST
-========================================= */
+/* =====================================================
+   SPIELER
+===================================================== */
 
 .player-list {
 
@@ -348,6 +425,7 @@ button {
   gap: 10px;
 
   margin-top: 15px;
+
 }
 
 .player-card {
@@ -362,6 +440,7 @@ button {
   border-left:
     4px solid
     #D9AA3E;
+
 }
 
 .player-card-title {
@@ -369,6 +448,7 @@ button {
   font-weight: bold;
 
   margin-bottom: 5px;
+
 }
 
 .player-card-info {
@@ -376,53 +456,46 @@ button {
   color: #CFE0D5;
 
   font-size: 12px;
+
 }
 
 
-/* =========================================
-   LOADING
-========================================= */
-
-.loading {
-
-  display: none;
-
-  text-align: center;
-
-  margin-top: 15px;
-
-  color: #D9AA3E;
-
-  font-weight: bold;
-}
-
-
-/* =========================================
+/* =====================================================
    MOBILE
-========================================= */
+===================================================== */
 
 @media (max-width: 700px) {
 
   body {
+
     padding: 12px;
+
   }
 
   .panel {
+
     padding: 15px;
+
   }
 
   .header h1 {
+
     font-size: 25px;
+
   }
 
   .stats {
+
     grid-template-columns:
       repeat(2, 1fr);
+
   }
 
   .player-list {
+
     grid-template-columns:
       1fr;
+
   }
 
 }
@@ -433,6 +506,7 @@ button {
 
 
 <body>
+
 
 <div class="container">
 
@@ -452,15 +526,15 @@ button {
 </h1>
 
 <p>
-Automatische Spieler- und Pose-Erkennung mit Computer Vision
+Automatische Multi-Personen- und Pose-Erkennung
 </p>
 
 </div>
 
 
-<!-- =========================================
+<!-- =====================================================
      UPLOAD PANEL
-========================================= -->
+===================================================== -->
 
 <div class="panel">
 
@@ -471,12 +545,14 @@ Automatische Spieler- und Pose-Erkennung mit Computer Vision
 Wähle dein Badminton-Video aus.
 </div>
 
+
 <label
   for="fileInput"
   class="upload-button"
 >
 📹 Video auswählen
 </label>
+
 
 <input
   id="fileInput"
@@ -488,10 +564,6 @@ Wähle dein Badminton-Video aus.
 </div>
 
 
-<!-- =========================================
-     LOADING
-========================================= -->
-
 <div
   id="loading"
   class="loading"
@@ -500,9 +572,9 @@ Wähle dein Badminton-Video aus.
 </div>
 
 
-<!-- =========================================
+<!-- =====================================================
      VIDEO
-========================================= -->
+===================================================== -->
 
 <div
   id="videoWrapper"
@@ -524,9 +596,9 @@ Wähle dein Badminton-Video aus.
 </div>
 
 
-<!-- =========================================
+<!-- =====================================================
      CONTROLS
-========================================= -->
+===================================================== -->
 
 <div
   id="controls"
@@ -539,6 +611,7 @@ Wähle dein Badminton-Video aus.
 >
 ▶ KI-Analyse starten
 </button>
+
 
 <button
   id="stopAnalysis"
@@ -561,9 +634,9 @@ Noch kein Video ausgewählt.
 </div>
 
 
-<!-- =========================================
+<!-- =====================================================
      ANALYSE RESULTATE
-========================================= -->
+===================================================== -->
 
 <div
   id="analysisPanel"
@@ -662,111 +735,62 @@ Analyse FPS
 <script>
 
 
-// ======================================================
-// ELEMENTE
-// ======================================================
-
+/* =====================================================
+   ELEMENTE
+===================================================== */
 
 const fileInput =
-  document.getElementById(
-    "fileInput"
-  );
-
+  document.getElementById("fileInput");
 
 const video =
-  document.getElementById(
-    "video"
-  );
-
+  document.getElementById("video");
 
 const videoWrapper =
-  document.getElementById(
-    "videoWrapper"
-  );
-
+  document.getElementById("videoWrapper");
 
 const overlay =
-  document.getElementById(
-    "overlay"
-  );
-
+  document.getElementById("overlay");
 
 const ctx =
-  overlay.getContext(
-    "2d"
-  );
-
+  overlay.getContext("2d");
 
 const controls =
-  document.getElementById(
-    "controls"
-  );
-
+  document.getElementById("controls");
 
 const startButton =
-  document.getElementById(
-    "startAnalysis"
-  );
-
+  document.getElementById("startAnalysis");
 
 const stopButton =
-  document.getElementById(
-    "stopAnalysis"
-  );
-
+  document.getElementById("stopAnalysis");
 
 const status =
-  document.getElementById(
-    "status"
-  );
-
+  document.getElementById("status");
 
 const loading =
-  document.getElementById(
-    "loading"
-  );
-
+  document.getElementById("loading");
 
 const analysisPanel =
-  document.getElementById(
-    "analysisPanel"
-  );
-
+  document.getElementById("analysisPanel");
 
 const playerCount =
-  document.getElementById(
-    "playerCount"
-  );
-
+  document.getElementById("playerCount");
 
 const confidence =
-  document.getElementById(
-    "confidence"
-  );
-
+  document.getElementById("confidence");
 
 const framesElement =
-  document.getElementById(
-    "frames"
-  );
-
+  document.getElementById("frames");
 
 const fpsElement =
-  document.getElementById(
-    "fps"
-  );
-
+  document.getElementById("fps");
 
 const playerList =
-  document.getElementById(
-    "playerList"
-  );
+  document.getElementById("playerList");
 
 
-// ======================================================
-// VARIABLEN
-// ======================================================
-
+/* =====================================================
+   GLOBALE VARIABLEN
+===================================================== */
 
 let detector = null;
 
@@ -774,87 +798,55 @@ let videoURL = null;
 
 let analyzing = false;
 
-let frameCount = 0;
-
 let animationFrame = null;
 
-let lastAnalysisTime = 0;
+let totalFrames = 0;
+
+let fpsFrames = 0;
+
+let lastFPSUpdate = performance.now();
 
 let analysisFPS = 0;
 
 
-// ======================================================
-// MOVE NET KONFIGURATION
-// ======================================================
+/* =====================================================
+   KONFIGURATION
+===================================================== */
 
 
-const MIN_SCORE =
-  0.25;
+/*
+   MultiPose Lightning kann mehrere Personen
+   gleichzeitig erkennen.
+
+   Die maximale Anzahl wird auf 4 gesetzt,
+   da Badminton-Doppel normalerweise
+   vier Spieler hat.
+*/
+
+const MAX_PLAYERS = 4;
 
 
-// ======================================================
-// SKELETT VERBINDUNGEN
-//
-// MoveNet Keypoints:
-//
-// 0  nose
-// 1  left_eye
-// 2  right_eye
-// 3  left_ear
-// 4  right_ear
-// 5  left_shoulder
-// 6  right_shoulder
-// 7  left_elbow
-// 8  right_elbow
-// 9  left_wrist
-// 10 right_wrist
-// 11 left_hip
-// 12 right_hip
-// 13 left_knee
-// 14 right_knee
-// 15 left_ankle
-// 16 right_ankle
-//
-// ======================================================
+/*
+   Niedrigere Schwelle als vorher.
+
+   Das hilft bei Spielern,
+   die weiter entfernt stehen.
+*/
+
+const MIN_SCORE = 0.20;
 
 
-const SKELETON = [
+/*
+   Anzahl sichtbarer Gelenkpunkte,
+   die mindestens vorhanden sein müssen.
+*/
 
-  [0, 1],
-  [0, 2],
-
-  [1, 3],
-  [2, 4],
-
-  [0, 5],
-  [0, 6],
-
-  [5, 6],
-
-  [5, 7],
-  [7, 9],
-
-  [6, 8],
-  [8, 10],
-
-  [5, 11],
-  [6, 12],
-
-  [11, 12],
-
-  [11, 13],
-  [13, 15],
-
-  [12, 14],
-  [14, 16]
-
-];
+const MIN_VISIBLE_POINTS = 5;
 
 
-// ======================================================
-// FARBEN FÜR SPIELER
-// ======================================================
-
+/*
+   Spielerfarben
+*/
 
 const PLAYER_COLORS = [
 
@@ -864,22 +856,56 @@ const PLAYER_COLORS = [
 
   "#FFCC00",
 
-  "#FF4D6D",
-
-  "#A855F7",
-
-  "#FF7A00"
+  "#FF4D6D"
 
 ];
 
 
-// ======================================================
-// VIDEO AUSWÄHLEN
-// ======================================================
+/* =====================================================
+   SKELETT
+===================================================== */
 
+const SKELETON = [
+
+  [0,1],
+  [0,2],
+
+  [1,3],
+  [2,4],
+
+  [0,5],
+  [0,6],
+
+  [5,6],
+
+  [5,7],
+  [7,9],
+
+  [6,8],
+  [8,10],
+
+  [5,11],
+  [6,12],
+
+  [11,12],
+
+  [11,13],
+  [13,15],
+
+  [12,14],
+  [14,16]
+
+];
+
+
+/* =====================================================
+   VIDEO AUSWÄHLEN
+===================================================== */
 
 fileInput.addEventListener(
+
   "change",
+
   function(event) {
 
 
@@ -895,9 +921,7 @@ fileInput.addEventListener(
 
 
     if (
-      !file.type.startsWith(
-        "video/"
-      )
+      !file.type.startsWith("video/")
     ) {
 
       status.textContent =
@@ -908,7 +932,9 @@ fileInput.addEventListener(
     }
 
 
-    // Alte URL freigeben
+    /*
+       Alte Video-URL entfernen
+    */
 
     if (videoURL) {
 
@@ -919,7 +945,9 @@ fileInput.addEventListener(
     }
 
 
-    // Neue Video URL
+    /*
+       Neue URL
+    */
 
     videoURL =
       URL.createObjectURL(
@@ -934,15 +962,15 @@ fileInput.addEventListener(
     video.load();
 
 
-    // Video anzeigen
+    /*
+       Oberfläche anzeigen
+    */
 
     videoWrapper.style.display =
       "block";
 
-
     controls.style.display =
       "flex";
-
 
     analysisPanel.style.display =
       "block";
@@ -953,25 +981,37 @@ fileInput.addEventListener(
       file.name;
 
 
-    // Canvas vorbereiten
+    /*
+       Alte Statistik zurücksetzen
+    */
+
+    resetStatistics();
+
+
+    /*
+       Canvas vorbereiten
+    */
 
     video.addEventListener(
+
       "loadedmetadata",
+
       setupCanvas,
+
       {
         once: true
       }
+
     );
 
-
   }
+
 );
 
 
-// ======================================================
-// CANVAS AN VIDEO ANPASSEN
-// ======================================================
-
+/* =====================================================
+   CANVAS EINRICHTEN
+===================================================== */
 
 function setupCanvas() {
 
@@ -984,21 +1024,69 @@ function setupCanvas() {
     video.videoHeight;
 
 
-  console.log(
-    "Video:",
-    video.videoWidth,
-    "x",
-    video.videoHeight
+  ctx.clearRect(
+
+    0,
+
+    0,
+
+    overlay.width,
+
+    overlay.height
+
   );
 
+
+  console.log(
+
+    "Videoauflösung:",
+
+    video.videoWidth,
+
+    "x",
+
+    video.videoHeight
+
+  );
 
 }
 
 
-// ======================================================
-// MOVE NET MODELL LADEN
-// ======================================================
+/* =====================================================
+   STATISTIK ZURÜCKSETZEN
+===================================================== */
 
+function resetStatistics() {
+
+
+  totalFrames = 0;
+
+  fpsFrames = 0;
+
+  lastFPSUpdate =
+    performance.now();
+
+  playerCount.textContent =
+    "0";
+
+  confidence.textContent =
+    "0%";
+
+  framesElement.textContent =
+    "0";
+
+  fpsElement.textContent =
+    "0";
+
+  playerList.innerHTML =
+    "";
+
+}
+
+
+/* =====================================================
+   MODELL LADEN
+===================================================== */
 
 async function loadModel() {
 
@@ -1015,13 +1103,15 @@ async function loadModel() {
 
 
   status.textContent =
-    "🤖 MoveNet Pose-Modell wird geladen...";
+    "🤖 Multi-Person-Pose-Modell wird geladen...";
 
 
   try {
 
 
-    // WebGL Backend aktivieren
+    /*
+       WebGL aktivieren
+    */
 
     await tf.setBackend(
       "webgl"
@@ -1032,12 +1122,22 @@ async function loadModel() {
 
 
     console.log(
+
       "TensorFlow Backend:",
+
       tf.getBackend()
+
     );
 
 
-    // MoveNet MultiPose laden
+    /*
+       WICHTIG:
+
+       Hier wird jetzt tatsächlich
+       MULTIPOSE_LIGHTNING verwendet.
+
+       Nicht SINGLEPOSE_THUNDER.
+    */
 
     detector =
       await poseDetection.createDetector(
@@ -1047,7 +1147,13 @@ async function loadModel() {
         {
 
           modelType:
-            poseDetection.movenet.modelType.SINGLEPOSE_THUNDER
+            poseDetection.movenet.modelType.MULTIPOSE_LIGHTNING,
+
+          enableSmoothing:
+            true,
+
+          minPoseScore:
+            0.15
 
         }
 
@@ -1059,7 +1165,7 @@ async function loadModel() {
 
 
     status.textContent =
-      "✅ Pose-Modell bereit. Du kannst die Analyse starten.";
+      "✅ Multi-Person-KI bereit. Bis zu 4 Spieler können erkannt werden.";
 
 
     return detector;
@@ -1069,8 +1175,11 @@ async function loadModel() {
 
 
     console.error(
-      "Fehler beim Laden des Pose-Modells:",
+
+      "Modellfehler:",
+
       error
+
     );
 
 
@@ -1079,7 +1188,7 @@ async function loadModel() {
 
 
     status.textContent =
-      "❌ Das Pose-Modell konnte nicht geladen werden. Öffne die Browser-Konsole für Details.";
+      "❌ KI-Modell konnte nicht geladen werden.";
 
 
     throw error;
@@ -1089,13 +1198,14 @@ async function loadModel() {
 }
 
 
-// ======================================================
-// ANALYSE STARTEN
-// ======================================================
-
+/* =====================================================
+   ANALYSE STARTEN
+===================================================== */
 
 startButton.addEventListener(
+
   "click",
+
   async function() {
 
 
@@ -1111,36 +1221,48 @@ startButton.addEventListener(
     }
 
 
+    if (analyzing) {
+
+      return;
+
+    }
+
+
     try {
 
 
-      // Modell laden
+      /*
+         Modell laden
+      */
 
       await loadModel();
 
+
+      /*
+         Analyse starten
+      */
 
       analyzing =
         true;
 
 
-      frameCount =
-        0;
+      resetStatistics();
 
 
-      lastAnalysisTime =
-        performance.now();
+      status.textContent =
+        "🤖 KI analysiert bis zu 4 Spieler gleichzeitig...";
 
 
-      // Video starten
+      /*
+         Video starten
+      */
 
       await video.play();
 
 
-      status.textContent =
-        "🤖 KI analysiert Spieler und Körperhaltung...";
-
-
-      // Analyse beginnen
+      /*
+         Analyse Loop
+      */
 
       detectFrame();
 
@@ -1159,16 +1281,18 @@ startButton.addEventListener(
     }
 
   }
+
 );
 
 
-// ======================================================
-// ANALYSE STOPPEN
-// ======================================================
-
+/* =====================================================
+   ANALYSE STOPPEN
+===================================================== */
 
 stopButton.addEventListener(
+
   "click",
+
   function() {
 
 
@@ -1180,7 +1304,9 @@ stopButton.addEventListener(
 
 
       cancelAnimationFrame(
+
         animationFrame
+
       );
 
 
@@ -1196,39 +1322,31 @@ stopButton.addEventListener(
     status.textContent =
       "⏹ Analyse gestoppt.";
 
-
   }
+
 );
 
 
-// ======================================================
-// FRAME ANALYSIEREN
-// ======================================================
-
+/* =====================================================
+   FRAME ANALYSIEREN
+===================================================== */
 
 async function detectFrame() {
 
 
   if (
-    !analyzing ||
+    !analyzing
+  ) {
+
+    return;
+
+  }
+
+
+  if (
     video.paused ||
     video.ended
   ) {
-
-
-    if (video.ended) {
-
-
-      analyzing =
-        false;
-
-
-      status.textContent =
-        "✅ Videoanalyse abgeschlossen.";
-
-
-    }
-
 
     return;
 
@@ -1238,10 +1356,11 @@ async function detectFrame() {
   try {
 
 
-    // ==============================================
-    // POSE ERKENNEN
-    // ==============================================
-
+    /*
+       ================================================
+       MULTI-POSE ERKENNUNG
+       ================================================
+    */
 
     const poses =
       await detector.estimatePoses(
@@ -1250,19 +1369,22 @@ async function detectFrame() {
 
         {
 
-          maxPoses: 4,
+          maxPoses:
+            MAX_PLAYERS,
 
-          flipHorizontal: false
+          flipHorizontal:
+            false
 
         }
 
       );
 
 
-    // ==============================================
-    // CANVAS LÖSCHEN
-    // ==============================================
-
+    /*
+       ================================================
+       CANVAS LÖSCHEN
+       ================================================
+    */
 
     ctx.clearRect(
 
@@ -1277,19 +1399,21 @@ async function detectFrame() {
     );
 
 
-    // ==============================================
-    // GÜLTIGE POSES FILTERN
-    // ==============================================
-
+    /*
+       ================================================
+       POSES FILTERN
+       ================================================
+    */
 
     const validPoses =
-      poses.filter(
+      poses
+
+      .filter(
 
         pose => {
 
           if (
-            !pose.keypoints ||
-            pose.keypoints.length === 0
+            !pose.keypoints
           ) {
 
             return false;
@@ -1301,26 +1425,45 @@ async function detectFrame() {
             pose.keypoints.filter(
 
               point =>
+
+                point.score !== undefined &&
+
                 point.score >=
-                MIN_SCORE
+                  MIN_SCORE
 
             );
 
 
           return (
+
             visiblePoints.length >=
-            5
+
+            MIN_VISIBLE_POINTS
+
           );
 
         }
 
+      )
+
+      /*
+         Höchstens vier Spieler
+      */
+
+      .slice(
+
+        0,
+
+        MAX_PLAYERS
+
       );
 
 
-    // ==============================================
-    // SPIELER ZEICHNEN
-    // ==============================================
-
+    /*
+       ================================================
+       SPIELER ZEICHNEN
+       ================================================
+    */
 
     validPoses.forEach(
 
@@ -1328,9 +1471,13 @@ async function detectFrame() {
 
 
         const color =
+
           PLAYER_COLORS[
+
             index %
+
             PLAYER_COLORS.length
+
           ];
 
 
@@ -1349,18 +1496,25 @@ async function detectFrame() {
     );
 
 
-    // ==============================================
-    // STATISTIK
-    // ==============================================
-
+    /*
+       ================================================
+       SPIELERANZAHL
+       ================================================
+    */
 
     playerCount.textContent =
+
       validPoses.length;
 
 
+    /*
+       ================================================
+       DURCHSCHNITTLICHE SICHERHEIT
+       ================================================
+    */
+
     let totalConfidence =
       0;
-
 
     let confidencePoints =
       0;
@@ -1377,17 +1531,21 @@ async function detectFrame() {
 
 
             if (
+
               point.score !== undefined &&
-              point.score >= MIN_SCORE
+
+              point.score >=
+                MIN_SCORE
+
             ) {
 
 
               totalConfidence +=
+
                 point.score;
 
 
               confidencePoints++;
-
 
             }
 
@@ -1401,98 +1559,114 @@ async function detectFrame() {
 
 
     if (
-      confidencePoints >
-      0
+      confidencePoints > 0
     ) {
 
 
       const average =
+
         totalConfidence /
+
         confidencePoints;
 
 
       confidence.textContent =
+
         Math.round(
+
           average *
+
           100
+
         ) +
+
         "%";
 
-
-    } else {
-
-
-      confidence.textContent =
-        "0%";
 
     }
 
 
-    // ==============================================
-    // FRAME COUNTER
-    // ==============================================
+    /*
+       ================================================
+       FRAME ZÄHLER
+       ================================================
+    */
 
+    totalFrames++;
 
-    frameCount++;
+    fpsFrames++;
 
 
     framesElement.textContent =
-      frameCount;
+
+      totalFrames;
 
 
-    // ==============================================
-    // FPS
-    // ==============================================
-
+    /*
+       ================================================
+       FPS
+       ================================================
+    */
 
     const now =
+
       performance.now();
 
 
     const elapsed =
+
       now -
-      lastAnalysisTime;
+
+      lastFPSUpdate;
 
 
     if (
-      elapsed >=
-      1000
+      elapsed >= 1000
     ) {
 
 
       analysisFPS =
+
         Math.round(
 
-          frameCount /
+          fpsFrames /
+
           (
+
             elapsed /
+
             1000
+
           )
 
         );
 
 
       fpsElement.textContent =
+
         analysisFPS;
 
 
-      frameCount =
-        0;
+      fpsFrames = 0;
 
 
-      lastAnalysisTime =
+      lastFPSUpdate =
+
         now;
 
     }
 
 
-    // ==============================================
-    // SPIELER-LISTE
-    // ==============================================
-
+    /*
+       ================================================
+       SPIELERLISTE
+       ================================================
+    */
 
     updatePlayerList(
+
       validPoses
+
     );
 
 
@@ -1500,29 +1674,39 @@ async function detectFrame() {
 
 
     console.error(
-      "Pose Detection Fehler:",
-      error
-    );
 
+      "Pose Detection Fehler:",
+
+      error
+
+    );
 
   }
 
 
-  // ==============================================
-  // NÄCHSTEN FRAME PLANEN
-  // ==============================================
-
+  /*
+     ================================================
+     NÄCHSTEN FRAME PLANEN
+     ================================================
+  */
 
   if (
+
     analyzing &&
+
     !video.paused &&
+
     !video.ended
+
   ) {
 
 
     animationFrame =
+
       requestAnimationFrame(
+
         detectFrame
+
       );
 
   }
@@ -1530,10 +1714,9 @@ async function detectFrame() {
 }
 
 
-// ======================================================
-// SPIELER ZEICHNEN
-// ======================================================
-
+/* =====================================================
+   SPIELER ZEICHNEN
+===================================================== */
 
 function drawPlayer(
 
@@ -1547,27 +1730,30 @@ function drawPlayer(
 
 
   const keypoints =
+
     pose.keypoints;
 
 
-  // ==============================================
-  // BOUNDING BOX BERECHNEN
-  // ==============================================
-
+  /*
+     Sichtbare Punkte
+  */
 
   const visible =
+
     keypoints.filter(
 
       point =>
+
+        point.score !== undefined &&
+
         point.score >=
-        MIN_SCORE
+          MIN_SCORE
 
     );
 
 
   if (
-    visible.length ===
-    0
+    visible.length === 0
   ) {
 
     return;
@@ -1575,64 +1761,97 @@ function drawPlayer(
   }
 
 
+  /*
+     ================================================
+     BOUNDING BOX
+     ================================================
+  */
+
   const xs =
+
     visible.map(
+
       point =>
+
         point.x
+
     );
 
 
   const ys =
+
     visible.map(
+
       point =>
+
         point.y
+
     );
 
 
   const minX =
+
     Math.min(
+
       ...xs
+
     );
 
 
   const maxX =
+
     Math.max(
+
       ...xs
+
     );
 
 
   const minY =
+
     Math.min(
+
       ...ys
+
     );
 
 
   const maxY =
+
     Math.max(
+
       ...ys
+
     );
 
 
   const width =
+
     maxX -
+
     minX;
 
 
   const height =
+
     maxY -
+
     minY;
 
 
-  // ==============================================
-  // BOUNDING BOX
-  // ==============================================
-
+  /*
+     ================================================
+     BOX
+     ================================================
+  */
 
   ctx.strokeStyle =
+
     color;
 
 
   ctx.lineWidth =
+
     3;
 
 
@@ -1649,27 +1868,41 @@ function drawPlayer(
   );
 
 
-  // ==============================================
-  // LABEL
-  // ==============================================
-
+  /*
+     ================================================
+     LABEL
+     ================================================
+  */
 
   const label =
+
     "Spieler " +
-    (index + 1);
+
+    (
+
+      index +
+
+      1
+
+    );
 
 
   ctx.font =
+
     "bold 15px Arial";
 
 
   const textWidth =
+
     ctx.measureText(
+
       label
+
     ).width;
 
 
   ctx.fillStyle =
+
     color;
 
 
@@ -1678,11 +1911,17 @@ function drawPlayer(
     minX,
 
     Math.max(
+
       0,
-      minY - 28
+
+      minY -
+
+      28
+
     ),
 
     textWidth +
+
     14,
 
     28
@@ -1691,6 +1930,7 @@ function drawPlayer(
 
 
   ctx.fillStyle =
+
     "#000000";
 
 
@@ -1699,30 +1939,40 @@ function drawPlayer(
     label,
 
     minX +
+
     7,
 
     Math.max(
+
       19,
-      minY - 9
+
+      minY -
+
+      9
+
     )
 
   );
 
 
-  // ==============================================
-  // SKELETT VERBINDUNGEN
-  // ==============================================
-
+  /*
+     ================================================
+     SKELETT
+     ================================================
+  */
 
   ctx.strokeStyle =
+
     color;
 
 
   ctx.lineWidth =
+
     4;
 
 
   ctx.lineCap =
+
     "round";
 
 
@@ -1732,20 +1982,29 @@ function drawPlayer(
 
 
       const pointA =
+
         keypoints[
+
           connection[0]
+
         ];
 
 
       const pointB =
+
         keypoints[
+
           connection[1]
+
         ];
 
 
       if (
+
         !pointA ||
+
         !pointB
+
       ) {
 
         return;
@@ -1754,10 +2013,15 @@ function drawPlayer(
 
 
       if (
+
         pointA.score <
-        MIN_SCORE ||
+
+          MIN_SCORE ||
+
         pointB.score <
-        MIN_SCORE
+
+          MIN_SCORE
+
       ) {
 
         return;
@@ -1788,16 +2052,16 @@ function drawPlayer(
 
       ctx.stroke();
 
-
     }
 
   );
 
 
-  // ==============================================
-  // GELENKPUNKTE
-  // ==============================================
-
+  /*
+     ================================================
+     GELENKPUNKTE
+     ================================================
+  */
 
   keypoints.forEach(
 
@@ -1805,14 +2069,21 @@ function drawPlayer(
 
 
       if (
+
         point.score <
+
         MIN_SCORE
+
       ) {
 
         return;
 
       }
 
+
+      /*
+         Äußerer Punkt
+      */
 
       ctx.beginPath();
 
@@ -1827,18 +2098,22 @@ function drawPlayer(
 
         0,
 
-        Math.PI *
-        2
+        Math.PI * 2
 
       );
 
 
       ctx.fillStyle =
+
         color;
 
 
       ctx.fill();
 
+
+      /*
+         Innerer Punkt
+      */
 
       ctx.beginPath();
 
@@ -1853,18 +2128,17 @@ function drawPlayer(
 
         0,
 
-        Math.PI *
-        2
+        Math.PI * 2
 
       );
 
 
       ctx.fillStyle =
+
         "#FFFFFF";
 
 
       ctx.fill();
-
 
     }
 
@@ -1873,17 +2147,19 @@ function drawPlayer(
 }
 
 
-// ======================================================
-// SPIELER-LISTE AKTUALISIEREN
-// ======================================================
-
+/* =====================================================
+   SPIELERLISTE
+===================================================== */
 
 function updatePlayerList(
+
   poses
+
 ) {
 
 
   playerList.innerHTML =
+
     "";
 
 
@@ -1893,61 +2169,78 @@ function updatePlayerList(
 
 
       const color =
+
         PLAYER_COLORS[
+
           index %
+
           PLAYER_COLORS.length
+
         ];
 
 
       const visible =
+
         pose.keypoints.filter(
 
           point =>
+
+            point.score !== undefined &&
+
             point.score >=
-            MIN_SCORE
+
+              MIN_SCORE
 
         );
 
 
       const average =
+
         visible.length > 0
 
-          ?
+        ?
 
-          visible.reduce(
+        visible.reduce(
 
-            (
-              sum,
+          (
 
-              point
+            sum,
 
-            ) =>
+            point
 
-              sum +
-              point.score,
+          ) =>
 
-            0
+            sum +
 
-          ) /
+            point.score,
 
-          visible.length
+          0
 
-          :
+        ) /
 
-          0;
+        visible.length
+
+        :
+
+        0;
 
 
       const card =
+
         document.createElement(
+
           "div"
+
         );
 
 
       card.className =
+
         "player-card";
 
 
       card.style.borderLeftColor =
+
         color;
 
 
@@ -1957,21 +2250,32 @@ function updatePlayerList(
           class="player-card-title"
           style="color:${color}"
         >
+
           Spieler ${index + 1}
+
         </div>
+
 
         <div class="player-card-info">
 
           Sichtbare Gelenkpunkte:
+
           ${visible.length}
+
 
           <br>
 
+
           Pose-Sicherheit:
+
           ${Math.round(
+
             average *
+
             100
+
           )}%
+
 
         </div>
 
@@ -1979,9 +2283,10 @@ function updatePlayerList(
 
 
       playerList.appendChild(
-        card
-      );
 
+        card
+
+      );
 
     }
 
@@ -1990,10 +2295,9 @@ function updatePlayerList(
 }
 
 
-// ======================================================
-// VIDEO ENDE
-// ======================================================
-
+/* =====================================================
+   VIDEO ENDE
+===================================================== */
 
 video.addEventListener(
 
@@ -2003,20 +2307,26 @@ video.addEventListener(
 
 
     analyzing =
+
       false;
 
 
     if (
+
       animationFrame
+
     ) {
 
 
       cancelAnimationFrame(
+
         animationFrame
+
       );
 
 
       animationFrame =
+
         null;
 
     }
@@ -2036,18 +2346,17 @@ video.addEventListener(
 
 
     status.textContent =
-      "✅ Videoanalyse abgeschlossen.";
 
+      "✅ Videoanalyse abgeschlossen.";
 
   }
 
 );
 
 
-// ======================================================
-// VIDEO PAUSE
-// ======================================================
-
+/* =====================================================
+   VIDEO PAUSE
+===================================================== */
 
 video.addEventListener(
 
@@ -2057,13 +2366,17 @@ video.addEventListener(
 
 
     if (
-      analyzing
+
+      analyzing &&
+
+      !video.ended
+
     ) {
 
 
       status.textContent =
-        "⏸ Video pausiert – Analyse wartet.";
 
+        "⏸ Video pausiert – Analyse wartet.";
 
     }
 
@@ -2072,10 +2385,9 @@ video.addEventListener(
 );
 
 
-// ======================================================
-// AUFRÄUMEN
-// ======================================================
-
+/* =====================================================
+   AUFRÄUMEN
+===================================================== */
 
 window.addEventListener(
 
@@ -2085,7 +2397,9 @@ window.addEventListener(
 
 
     if (
+
       videoURL
+
     ) {
 
 
@@ -2095,16 +2409,15 @@ window.addEventListener(
 
       );
 
-
     }
-
 
   }
 
 );
 
-
 </script>
 
+
 </body>
+
 </html>
