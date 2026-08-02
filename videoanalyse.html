@@ -140,4 +140,133 @@
       canvasElement.height = videoElement.clientHeight;
 
       canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        const landmarks = results.poseLandmarks;
+
+        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#ffe600', lineWidth: 1, radius: 4 });
+
+        const leftAnkle = landmarks[27];
+        const rightAnkle = landmarks[28];
+
+        if (leftAnkle && rightAnkle && (leftAnkle.visibility > 0.3 || rightAnkle.visibility > 0.3)) {
+          const currentAnkleX = ((leftAnkle.x + rightAnkle.x) / 2) * canvasElement.width;
+          const currentAnkleY = ((leftAnkle.y + rightAnkle.y) / 2) * canvasElement.height;
+
+          if (prevAnklePos !== null) {
+            const dx = currentAnkleX - prevAnklePos.x;
+            const dy = currentAnkleY - prevAnklePos.y;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+
+            // Stand-Zittern herausfiltern
+            if (dist < 3.0) {
+              dist = 0;
+            }
+
+            historySpeeds.push(dist);
+            if (historySpeeds.length > 30) historySpeeds.shift();
+
+            // Schritte registrieren
+            if (dist > 6.0 && !isStepPeak) {
+              isStepPeak = true;
+              stepTimestamps.push(videoElement.currentTime);
+            } else if (dist < 3.5) {
+              isStepPeak = false;
+            }
+
+            const now = videoElement.currentTime;
+            stepTimestamps = stepTimestamps.filter(t => (now - t) <= 3.0);
+            
+            const stepsPerMin = Math.round((stepTimestamps.length / 3.0) * 60);
+            cadenceValue.innerText = `${stepsPerMin} Schritte/Min`;
+
+            // Rhythmus-Score
+            const nonZeroSpeeds = historySpeeds.filter(s => s > 0);
+            
+            if (nonZeroSpeeds.length < 5) {
+              rhythmScore.innerText = '0%';
+              rhythmScore.className = 'metric-value status-warn';
+              flowStatus.innerText = '🛑 Stillstand / Keine Schritte';
+              flowStatus.className = 'metric-value status-warn';
+            } else {
+              const avgSpeed = nonZeroSpeeds.reduce((a, b) => a + b, 0) / nonZeroSpeeds.length;
+
+              let variance = 0;
+              nonZeroSpeeds.forEach(s => {
+                variance += Math.abs(s - avgSpeed);
+              });
+              const jerkFactor = variance / nonZeroSpeeds.length;
+
+              let score = Math.round(100 - (jerkFactor * 4.5));
+              if (score > 92) score = 88;
+              if (score < 15) score = 15;
+
+              rhythmScore.innerText = `${score}%`;
+
+              if (score >= 75) {
+                rhythmScore.className = 'metric-value status-good';
+                flowStatus.innerText = '✨ Flüssiger Pro-Flow';
+                flowStatus.className = 'metric-value status-good';
+              } else if (score >= 50) {
+                rhythmScore.className = 'metric-value';
+                flowStatus.innerText = '⚖️ Variable Schrittfolge';
+                flowStatus.className = 'metric-value';
+              } else {
+                rhythmScore.className = 'metric-value status-warn';
+                flowStatus.innerText = '⚠️ Unruhig / Abgehackt';
+                flowStatus.className = 'metric-value status-warn';
+              }
+            }
+
+            // Graph zeichnen
+            canvasCtx.beginPath();
+            canvasCtx.strokeStyle = '#3fb950';
+            canvasCtx.lineWidth = 2;
+
+            const graphW = 150;
+            const graphH = 40;
+            const startX = canvasElement.width - graphW - 15;
+            const startY = 15;
+
+            canvasCtx.fillStyle = 'rgba(13, 17, 23, 0.85)';
+            canvasCtx.fillRect(startX - 5, startY - 5, graphW + 10, graphH + 10);
+
+            historySpeeds.forEach((spd, i) => {
+              const x = startX + (i * (graphW / 30));
+              const y = startY + graphH - Math.min(graphH, spd * 2);
+              if (i === 0) canvasCtx.moveTo(x, y);
+              else canvasCtx.lineTo(x, y);
+            });
+            canvasCtx.stroke();
+          }
+
+          prevAnklePos = { x: currentAnkleX, y: currentAnkleY };
+        }
+      }
+      canvasCtx.restore();
+    });
+
+    async function processFrame() {
+      if (!videoElement.paused && !videoElement.ended) {
+        await pose.send({ image: videoElement });
+        requestAnimationFrame(processFrame);
+      }
+    }
+
+    videoElement.addEventListener('play', () => processFrame());
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        videoElement.src = URL.createObjectURL(file);
+        videoElement.load();
+        historySpeeds = [];
+        stepTimestamps = [];
+        prevAnklePos = null;
+      }
+    });
+  </script>
+</body>
+</html>
