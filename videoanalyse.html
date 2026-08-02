@@ -7,30 +7,25 @@
   const hitStatus = document.getElementById('hitStatus');
   const splitStatus = document.getElementById('splitStatus');
 
-  let lastWristY = null;
-  let lastWristSpeed = 0;
   let hitActiveFrames = 0;
-  let playerReceiverHipY = null;
-  let splitDetectedInWindow = false;
+  let lastWristY = null;
+  let prevReceiverHipY = null;
 
-  // MediaPipe Pose mit hoher Präzision für kleine/entfernte Personen
+  // MediaPipe Pose Instanz
   const pose = new Pose({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
   });
 
   pose.setOptions({
-    modelComplexity: 2, // 2 = Höchste Präzision für entfernte Personen auf dem Feld
+    modelComplexity: 1,
     smoothLandmarks: true,
-    minDetectionConfidence: 0.2, // Niedrigerer Schwellenwert, damit kleine Figuren erkannt werden
-    minTrackingConfidence: 0.2
+    minDetectionConfidence: 0.15, // Sehr sensibel für weit entfernte Spieler
+    minTrackingConfidence: 0.15
   });
 
   pose.onResults((results) => {
-    // Canvas exakt auf die gerenderte Videogröße skalieren
-    if (videoElement.videoWidth && videoElement.videoHeight) {
-      canvasElement.width = videoElement.clientWidth;
-      canvasElement.height = videoElement.clientHeight;
-    }
+    canvasElement.width = videoElement.clientWidth;
+    canvasElement.height = videoElement.clientHeight;
 
     canvasCtx.save();
     canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
@@ -38,79 +33,66 @@
     if (results.poseLandmarks) {
       const landmarks = results.poseLandmarks;
 
-      // Skelett & Punkte zeichnen
+      // Draw Visual Skeleton
       drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
       drawLandmarks(canvasCtx, landmarks, { color: '#ff0844', lineWidth: 1, radius: 3 });
 
-      // 1. SCHLAGEINGANG (Schläger-Hand)
+      // 1. SCHLAG-DETEKTION (Hand/Racket oben & Peitschenbewegung)
       const wrist = landmarks[16];
       const shoulder = landmarks[12];
+      const hip = landmarks[24];
 
       if (wrist && shoulder && wrist.visibility > 0.2) {
-        const currentWristY = wrist.y;
-
         if (lastWristY !== null) {
-          const wristSpeedY = (lastWristY - currentWristY);
-
-          if (wrist.y < shoulder.y && wristSpeedY > 0.015) {
-            hitActiveFrames = 10;
-            splitDetectedInWindow = false;
+          const speedY = lastWristY - wrist.y;
+          // Wenn die Hand weit oben ist und sich schlagartig bewegt
+          if (wrist.y < shoulder.y && speedY > 0.012) {
+            hitActiveFrames = 15; // Schlag-Marker für ca. 0.5s aktivieren
           }
         }
-        lastWristY = currentWristY;
+        lastWristY = wrist.y;
       }
 
-      // 2. ROTER KONTAKTPUNKT
-      if (hitActiveFrames > 0) {
-        hitActiveFrames--;
+      // 2. SPLIT-STEP MONITORING (Hüft-Dip des Empfängers)
+      if (hip && hip.visibility > 0.2) {
+        if (prevReceiverHipY !== null) {
+          const dip = hip.y - prevReceiverHipY;
+          
+          if (hitActiveFrames > 0) {
+            // Roter Punkt am Kontaktpunkt
+            const wX = wrist.x * canvasElement.width;
+            const wY = wrist.y * canvasElement.height;
 
-        const wristX = wrist.x * canvasElement.width;
-        const wristY = wrist.y * canvasElement.height;
+            canvasCtx.beginPath();
+            canvasCtx.arc(wX, wY - 20, 18, 0, 2 * Math.PI);
+            canvasCtx.fillStyle = '#ff0000';
+            canvasCtx.fill();
+            canvasCtx.strokeStyle = '#ffffff';
+            canvasCtx.lineWidth = 2;
+            canvasCtx.stroke();
 
-        canvasCtx.beginPath();
-        canvasCtx.arc(wristX, wristY, 20, 0, 2 * Math.PI);
-        canvasCtx.fillStyle = 'rgba(255, 0, 0, 0.85)';
-        canvasCtx.fill();
-        canvasCtx.strokeStyle = '#FFFFFF';
-        canvasCtx.lineWidth = 2;
-        canvasCtx.stroke();
+            hitStatus.innerText = '💥 KONTAKTPUNKT (ROT)';
+            hitStatus.className = 'metric-value status-late';
 
-        hitStatus.innerText = '💥 SCHLAG ERFOLGT (ROT)';
-        hitStatus.className = 'metric-value status-late';
-
-        // 3. SPLIT-STEP MONITORING
-        const leftHip = landmarks[23];
-        const rightHip = landmarks[24];
-
-        if (leftHip && rightHip) {
-          const currentHipY = (leftHip.y + rightHip.y) / 2;
-
-          if (playerReceiverHipY !== null) {
-            const hipDip = currentHipY - playerReceiverHipY;
-            if (hipDip > 0.005) {
-              splitDetectedInWindow = true;
+            if (dip > 0.004) {
+              splitStatus.innerText = '🎯 PERFEKT! Split-Step erkannt';
+              splitStatus.className = 'metric-value status-perfect';
             }
           }
-          playerReceiverHipY = currentHipY;
         }
+        prevReceiverHipY = hip.y;
+      }
 
-        if (splitDetectedInWindow) {
-          splitStatus.innerText = '🎯 PERFEKT! Split-Step erkannt';
-          splitStatus.className = 'metric-value status-perfect';
-        } else {
-          splitStatus.innerText = '⚠️ Kein Split-Step während Schlag';
-          splitStatus.className = 'metric-value status-early';
-        }
-
+      if (hitActiveFrames > 0) {
+        hitActiveFrames--;
       } else {
-        hitStatus.innerText = 'Warte auf nächsten Schlag...';
+        hitStatus.innerText = 'Warte auf Schlag...';
         hitStatus.className = 'metric-value';
       }
     }
     canvasCtx.restore();
   });
 
-  // Kontinuierliche Analyse-Schleife
   async function processFrame() {
     if (!videoElement.paused && !videoElement.ended) {
       await pose.send({ image: videoElement });
@@ -125,12 +107,11 @@
   fileInput.addEventListener('change', (e) => {
     const file = e.target.files[0];
     if (file) {
-      const url = URL.createObjectURL(file);
-      videoElement.src = url;
+      videoElement.src = URL.createObjectURL(file);
       videoElement.load();
       hitActiveFrames = 0;
       lastWristY = null;
-      playerReceiverHipY = null;
+      prevReceiverHipY = null;
     }
   });
 </script>
