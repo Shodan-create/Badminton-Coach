@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Badminton Coach - Footwork & Split-Step Analytics</title>
+  <title>Badminton Coach - Auto Split-Step & Hit Detection</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -47,7 +47,7 @@
     .video-container {
       position: relative;
       max-width: 90vw;
-      max-height: 65vh;
+      max-height: 60vh;
       display: flex;
       justify-content: center;
       border: 1px solid #30363d;
@@ -57,7 +57,7 @@
 
     video {
       max-width: 100%;
-      max-height: 65vh;
+      max-height: 60vh;
     }
 
     canvas {
@@ -69,13 +69,12 @@
       pointer-events: none;
     }
 
-    /* Dashboard Styles */
     .dashboard {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
       gap: 15px;
       width: 90vw;
-      max-width: 900px;
+      max-width: 800px;
       margin-top: 20px;
     }
 
@@ -83,7 +82,7 @@
       background-color: #161b22;
       border: 1px solid #30363d;
       border-radius: 8px;
-      padding: 15px;
+      padding: 20px;
       text-align: center;
     }
 
@@ -95,20 +94,20 @@
     }
 
     .metric-value {
-      font-size: 1.4rem;
+      font-size: 1.5rem;
       font-weight: bold;
       color: #58a6ff;
     }
 
-    .status-active { color: #2f81f7 !important; }
-    .status-good { color: #3fb950 !important; }
-    .status-warn { color: #d29922 !important; }
+    .status-perfect { color: #3fb950 !important; }
+    .status-early { color: #d29922 !important; }
+    .status-late { color: #f85149 !important; }
   </style>
 </head>
 <body>
 
-  <h1>Badminton Footwork Analytics</h1>
-  <div class="subtitle">Automatische Split-Step- & Beinarbeits-Analyse</div>
+  <h1>Badminton Auto-Timing Analytics</h1>
+  <div class="subtitle">Automatische Schlag-Erkennung (Rot) & Split-Step-Prüfung</div>
   
   <div class="controls">
     <input type="file" id="videoUpload" accept="video/*" />
@@ -121,16 +120,12 @@
 
   <div class="dashboard">
     <div class="metric-card">
-      <h3>Split-Step Status</h3>
-      <div id="splitStepStatus" class="metric-value">Bereit...</div>
+      <h3>Gegner Kontaktpunkt</h3>
+      <div id="hitStatus" class="metric-value">Warte auf Schlag...</div>
     </div>
     <div class="metric-card">
-      <h3>Standbreite (Füße/Schulter)</h3>
-      <div id="stanceWidthValue" class="metric-value">0.0x</div>
-    </div>
-    <div class="metric-card">
-      <h3>Antritts-Geschwindigkeit</h3>
-      <div id="moveSpeedValue" class="metric-value">0 px/f</div>
+      <h3>Split-Step Timing (Empfänger)</h3>
+      <div id="splitStatus" class="metric-value">Analysiere...</div>
     </div>
   </div>
 
@@ -140,14 +135,16 @@
     const canvasCtx = canvasElement.getContext('2d');
     const fileInput = document.getElementById('videoUpload');
 
-    // Dashboard Elements
-    const splitStepStatus = document.getElementById('splitStepStatus');
-    const stanceWidthValue = document.getElementById('stanceWidthValue');
-    const moveSpeedValue = document.getElementById('moveSpeedValue');
+    const hitStatus = document.getElementById('hitStatus');
+    const splitStatus = document.getElementById('splitStatus');
 
-    // Tracking Hilfsvariablen
-    let previousHipY = null;
-    let previousAnkleX = null;
+    // Tracking-Speicher für Bewegungsmuster
+    let lastWristY = null;
+    let lastWristSpeed = 0;
+    let hitActiveFrames = 0; // Wie lange der rote Marker sichtbar bleibt
+
+    let playerReceiverHipY = null;
+    let splitDetectedInWindow = false;
 
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
@@ -170,84 +167,77 @@
       if (results.poseLandmarks) {
         const landmarks = results.poseLandmarks;
 
-        // Custom Styling: Unterkörper hervorgehoben (Neon-Gelb)
-        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#ffe600', lineWidth: 1, radius: 4 });
+        // Skelett zeichnen
+        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#58a6ff', lineWidth: 2 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#3fb950', lineWidth: 1, radius: 3 });
 
-        // Wichtige Punkte für Beinarbeit
-        const leftShoulder = landmarks[11];
-        const rightShoulder = landmarks[12];
-        const leftHip = landmarks[23];
-        const rightHip = landmarks[24];
-        const leftAnkle = landmarks[27];
-        const rightAnkle = landmarks[28];
+        // 1. SCHLAGERKENNUNG (Schläger / Hand oben & maximale Geschwindigkeitsänderung)
+        const wrist = landmarks[16]; // Rechecktes Handgelenk
+        const shoulder = landmarks[12];
+        const hip = landmarks[24];
 
-        // Sichtbarkeitsprüfung
-        if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5 && 
-            leftAnkle.visibility > 0.5 && rightAnkle.visibility > 0.5) {
+        if (wrist.visibility > 0.5 && shoulder.visibility > 0.5) {
+          const currentWristY = wrist.y;
 
-          // 1. STANDBREITE (Verhältnis Fußabstand zu Schulterabstand)
-          const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
-          const ankleWidth = Math.abs(rightAnkle.x - leftAnkle.x);
-          
-          const stanceRatio = shoulderWidth > 0 ? (ankleWidth / shoulderWidth).toFixed(2) : 0;
-          
-          stanceWidthValue.innerText = `${stanceRatio}x Schulterbreite`;
-          if (stanceRatio >= 1.2 && stanceRatio <= 1.8) {
-            stanceWidthValue.className = 'metric-value status-good';
-          } else if (stanceRatio < 1.0) {
-            stanceWidthValue.className = 'metric-value status-warn';
-          } else {
-            stanceWidthValue.className = 'metric-value';
-          }
+          if (lastWristY !== null) {
+            const wristSpeedY = (lastWristY - currentWristY); // Nach oben gerichtet
 
-          // 2. SPLIT-STEP ERKENNUNG (Hüft-Dip / Schwerpunkt-Absenkung)
-          const currentHipY = (leftHip.y + rightHip.y) / 2;
-
-          if (previousHipY !== null) {
-            const hipVelocityY = currentHipY - previousHipY; // Positiv = Abwärtsbewegung (Dip)
-
-            // Schnelles Absenken der Hüfte signalisiert den Split-Step Landing Dip
-            if (hipVelocityY > 0.012 && stanceRatio >= 1.1) {
-              splitStepStatus.innerText = '⚡ SPLIT-STEP DETEKTIERT';
-              splitStepStatus.className = 'metric-value status-good';
-            } else if (hipVelocityY < -0.012) {
-              splitStepStatus.innerText = '🚀 Abdruck / Sprung';
-              splitStepStatus.className = 'metric-value status-active';
-            } else {
-              splitStepStatus.innerText = 'In Bewegung / Neutral';
-              splitStepStatus.className = 'metric-value';
+            // Treffpunkt-Bedingung: Hand über Schulter + plötzlicher Peitschenstopp / Beschleunigung
+            if (wrist.y < shoulder.y && wristSpeedY > 0.02 && lastWristSpeed > wristSpeedY) {
+              hitActiveFrames = 12; // Marker für 12 Frames (~0.4s) auf ROT setzen
+              splitDetectedInWindow = false;
             }
+            lastWristSpeed = wristSpeedY;
           }
-          previousHipY = currentHipY;
+          lastWristY = currentWristY;
+        }
 
-          // 3. ANTRITTS-GESCHWINDIGKEIT / FOOTWORK VELOCITY
-          const currentAnkleX = (leftAnkle.x + rightAnkle.x) / 2;
-          if (previousAnkleX !== null) {
-            const lateralDisplacement = Math.abs(currentAnkleX - previousAnkleX) * canvasElement.width;
-            const lateralSpeed = Math.round(lateralDisplacement);
+        // 2. ROTER KONTAKTPUNKT ZEICHNEN
+        if (hitActiveFrames > 0) {
+          hitActiveFrames--;
 
-            moveSpeedValue.innerText = `${lateralSpeed} px/frame`;
-            if (lateralSpeed > 12) {
-              moveSpeedValue.className = 'metric-value status-good';
-            } else {
-              moveSpeedValue.className = 'metric-value';
-            }
-          }
-          previousAnkleX = currentAnkleX;
+          const wristX = wrist.x * canvasElement.width;
+          const wristY = wrist.y * canvasElement.height;
 
-          // Visualisierungs-Linie für Standbreite direkt am Boden zeichnen
-          const leftAnkleX = leftAnkle.x * canvasElement.width;
-          const leftAnkleY = leftAnkle.y * canvasElement.height;
-          const rightAnkleX = rightAnkle.x * canvasElement.width;
-          const rightAnkleY = rightAnkle.y * canvasElement.height;
-
+          // Roter pulsierender Schlag-Marker am Schläger/Handgelenk
           canvasCtx.beginPath();
-          canvasCtx.moveTo(leftAnkleX, leftAnkleY);
-          canvasCtx.lineTo(rightAnkleX, rightAnkleY);
-          canvasCtx.strokeStyle = (stanceRatio >= 1.2 && stanceRatio <= 1.8) ? '#3fb950' : '#d29922';
-          canvasCtx.lineWidth = 4;
+          canvasCtx.arc(wristX, wristY - 30, 25, 0, 2 * Math.PI);
+          canvasCtx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+          canvasCtx.fill();
+          canvasCtx.strokeStyle = '#FFFFFF';
+          canvasCtx.lineWidth = 3;
           canvasCtx.stroke();
+
+          hitStatus.innerText = '💥 SCHLAG ERFOLGT (ROT)';
+          hitStatus.className = 'metric-value status-late';
+
+          // 3. AUTOMATISCHER SPLIT-STEP CHECK (Während Rot aktiv ist)
+          const leftHip = landmarks[23];
+          const rightHip = landmarks[24];
+
+          if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
+            const currentHipY = (leftHip.y + rightHip.y) / 2;
+
+            if (playerReceiverHipY !== null) {
+              const hipDip = currentHipY - playerReceiverHipY; // Absenken
+              if (hipDip > 0.008) {
+                splitDetectedInWindow = true;
+              }
+            }
+            playerReceiverHipY = currentHipY;
+          }
+
+          if (splitDetectedInWindow) {
+            splitStatus.innerText = '🎯 PERFEKT! Split-Step während Schlag';
+            splitStatus.className = 'metric-value status-perfect';
+          } else {
+            splitStatus.innerText = '⚠️ Keinen Split-Step erkannt';
+            splitStatus.className = 'metric-value status-early';
+          }
+
+        } else {
+          hitStatus.innerText = 'Warte auf nächsten Schlag...';
+          hitStatus.className = 'metric-value';
         }
       }
       canvasCtx.restore();
@@ -270,8 +260,9 @@
         const url = URL.createObjectURL(file);
         videoElement.src = url;
         videoElement.load();
-        previousHipY = null;
-        previousAnkleX = null;
+        hitActiveFrames = 0;
+        lastWristY = null;
+        playerReceiverHipY = null;
       }
     });
   </script>
