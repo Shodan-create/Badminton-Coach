@@ -8,10 +8,9 @@
   const flowStatus = document.getElementById('flowStatus');
 
   let historySpeeds = [];
-  let stepTimestamps = []; // Speichert Zeitpunkte von echten Schritten
-  let prevFootX = null;
-  let prevFootY = null;
-  let isMovingUp = false;
+  let stepTimestamps = [];
+  let prevAnklePos = null;
+  let isStepPeak = false;
 
   const pose = new Pose({
     locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
@@ -40,98 +39,112 @@
       const leftAnkle = landmarks[27];
       const rightAnkle = landmarks[28];
 
-      if (leftAnkle && rightAnkle) {
-        const currentFootX = (leftAnkle.x + rightAnkle.x) / 2;
-        const currentFootY = (leftAnkle.y + rightAnkle.y) / 2;
+      if (leftAnkle && rightAnkle && (leftAnkle.visibility > 0.3 || rightAnkle.visibility > 0.3)) {
+        // Richtige Pixellokalisierung der Fußgelenke
+        const currentAnkleX = ((leftAnkle.x + rightAnkle.x) / 2) * canvasElement.width;
+        const currentAnkleY = ((leftAnkle.y + rightAnkle.y) / 2) * canvasElement.height;
 
-        if (prevFootX !== null) {
-          const dx = (currentFootX - prevFootX) * canvasElement.width;
-          const dy = (currentFootY - prevFootY) * canvasElement.height;
-          const stepSpeed = Math.sqrt(dx * dx + dy * dy);
+        if (prevAnklePos !== null) {
+          // Tatsächliche Distanz in Pixeln
+          const dx = currentAnkleX - prevAnklePos.x;
+          const dy = currentAnkleY - prevAnklePos.y;
+          let dist = Math.sqrt(dx * dx + dy * dy);
 
-          historySpeeds.push(stepSpeed);
-          if (historySpeeds.length > 45) historySpeeds.shift(); // Schaut sich ca. 1.5 Sekunden an
-
-          // 1. SCHRITTFREQUENZ / CADENCE (PEAK-ERKENNUNG)
-          // Ein Schritt gilt als getätigt, wenn die Bewegung nach einer Beschleunigung wieder abfällt
-          if (stepSpeed > 2.5 && !isMovingUp) {
-            isMovingUp = true;
-            const now = videoElement.currentTime;
-            stepTimestamps.push(now);
-          } else if (stepSpeed < 1.5) {
-            isMovingUp = false;
+          // 1. KANALSUMPF-FILTER: Rauschen/Zittern unter 3px ignorieren
+          if (dist < 3.0) {
+            dist = 0;
           }
 
-          // Nur Schritte der letzten 5 Sekunden im Video berücksichtigen
+          historySpeeds.push(dist);
+          if (historySpeeds.length > 30) historySpeeds.shift(); // 1 Sekunde Puffer bei 30fps
+
+          // 2. REALISTISCHER SCHRITTZÄHLER (CADENCE)
+          // Ein Schritt ist ein klarer Ausschlag (> 6.0 px Bewegung)
+          if (dist > 6.0 && !isStepPeak) {
+            isStepPeak = true;
+            stepTimestamps.push(videoElement.currentTime);
+          } else if (dist < 3.5) {
+            isStepPeak = false; // Zurücksetzen für den nächsten Schritt
+          }
+
+          // Schritte der letzten 3 Sekunden berechnen
           const now = videoElement.currentTime;
-          stepTimestamps = stepTimestamps.filter(t => (now - t) <= 5);
-
-          // Hochrechnen auf Schritte pro Minute (BPM / Cadence)
-          const stepsPerMinute = Math.round((stepTimestamps.length / 5) * 60);
-          cadenceValue.innerText = `${stepsPerMinute} Schritte/Min`;
-
-
-          // 2. STRENGERE & REALISTISCHERE FLÜSSIGKEITS-BERECHNUNG
-          const avgSpeed = historySpeeds.reduce((a, b) => a + b, 0) / historySpeeds.length;
+          stepTimestamps = stepTimestamps.filter(t => (now - t) <= 3.0);
           
-          // Varianz / Ruckel-Faktor berechnen
-          let varianceSum = 0;
-          for (let i = 0; i < historySpeeds.length; i++) {
-            varianceSum += Math.abs(historySpeeds[i] - avgSpeed);
-          }
-          const meanJerk = varianceSum / historySpeeds.length;
-
-          // Neuer strenger Algorithmus: Ruckler & harte Stops drücken den Score spürbar!
-          // Ein "Pro Flow" liegt meist zwischen 75% und 92%. Nur perfektes Gleiten erreicht >90%.
-          let realisticRhythm = Math.round(100 - (meanJerk * 18));
-          if (realisticRhythm > 98) realisticRhythm = 95; // Hard-Cap für Realismus
-          if (realisticRhythm < 10) realisticRhythm = 10;
-
-          rhythmScore.innerText = `${realisticRhythm}%`;
+          // Frequenz auf Schritte / Min hochrechnen
+          const stepsPerMin = Math.round((stepTimestamps.length / 3.0) * 60);
+          cadenceValue.innerText = `${stepsPerMin} Schritte/Min`;
 
 
-          // 3. HARDCORE-EINSTUFUNG DER STATUS-TEXTE
-          if (realisticRhythm >= 82) {
-            rhythmScore.className = 'metric-value status-good';
-            flowStatus.innerText = '✨ Flüssiger Pro-Flow';
-            flowStatus.className = 'metric-value status-good';
-          } else if (realisticRhythm >= 60) {
-            rhythmScore.className = 'metric-value';
-            flowStatus.innerText = '⚖️ Solider Rhythmus (Tempo-Wechsel)';
-            flowStatus.className = 'metric-value';
-          } else {
+          // 3. ECHTE DYNAMISCHE FLÜSSIGKEITS-ANALYSE
+          const nonZeroSpeeds = historySpeeds.filter(s => s > 0);
+          
+          if (nonZeroSpeeds.length < 5) {
+            // Stillstand oder kaum Bewegung
+            rhythmScore.innerText = '0%';
             rhythmScore.className = 'metric-value status-warn';
-            flowStatus.innerText = '⚠️ Stopp-and-Go / Ruckelig';
+            flowStatus.innerText = '🛑 Stillstand / Keine Schritte';
             flowStatus.className = 'metric-value status-warn';
+          } else {
+            // Durchschnittliche Schrittgeschwindigkeit
+            const avgSpeed = nonZeroSpeeds.reduce((a, b) => a + b, 0) / nonZeroSpeeds.length;
+
+            // Varianz (Ruckeln) berechnen
+            let variance = 0;
+            nonZeroSpeeds.forEach(s => {
+              variance += Math.abs(s - avgSpeed);
+            });
+            const jerkFactor = variance / nonZeroSpeeds.length;
+
+            // Neuer realistischer Algorithmus:
+            // Hohe Bewegungsänderung = Rhythmus fällt ab!
+            let score = Math.round(100 - (jerkFactor * 4.5));
+            if (score > 92) score = 88; // Selbst Profis haben selten konstant über 90%
+            if (score < 15) score = 15;
+
+            rhythmScore.innerText = `${score}%`;
+
+            if (score >= 75) {
+              rhythmScore.className = 'metric-value status-good';
+              flowStatus.innerText = '✨ Flüssiger Pro-Flow';
+              flowStatus.className = 'metric-value status-good';
+            } else if (score >= 50) {
+              rhythmScore.className = 'metric-value';
+              flowStatus.innerText = '⚖️ Variable Schrittfolge';
+              flowStatus.className = 'metric-value';
+            } else {
+              rhythmScore.className = 'metric-value status-warn';
+              flowStatus.innerText = '⚠️ Unruhig / Abgehackt';
+              flowStatus.className = 'metric-value status-warn';
+            }
           }
 
-
-          // 4. RHYTHMUS-GRAPH
+          // 4. VISUELLER GRAPH ON-SCREEN
           canvasCtx.beginPath();
-          canvasCtx.strokeStyle = realisticRhythm >= 82 ? '#3fb950' : '#d29922';
+          canvasCtx.strokeStyle = '#3fb950';
           canvasCtx.lineWidth = 2;
 
-          const graphWidth = 160;
-          const graphHeight = 45;
-          const startX = canvasElement.width - graphWidth - 15;
+          const graphW = 150;
+          const graphH = 40;
+          const startX = canvasElement.width - graphW - 15;
           const startY = 15;
 
           canvasCtx.fillStyle = 'rgba(13, 17, 23, 0.85)';
-          canvasCtx.fillRect(startX - 8, startY - 8, graphWidth + 16, graphHeight + 16);
+          canvasCtx.fillRect(startX - 5, startY - 5, graphW + 10, graphH + 10);
 
-          historySpeeds.forEach((spd, idx) => {
-            const x = startX + (idx * (graphWidth / 45));
-            const y = startY + graphHeight - Math.min(graphHeight, spd * 3);
-            if (idx === 0) canvasCtx.moveTo(x, y);
+          historySpeeds.forEach((spd, i) => {
+            const x = startX + (i * (graphW / 30));
+            const y = startY + graphH - Math.min(graphH, spd * 2);
+            if (i === 0) canvasCtx.moveTo(x, y);
             else canvasCtx.lineTo(x, y);
           });
           canvasCtx.stroke();
         }
 
-        prevFootX = currentFootX;
-        prevFootY = currentFootY;
+        prevAnklePos = { x: currentAnkleX, y: currentAnkleY };
       }
     }
+    canvasCtx.restore();
   });
 
   async function processFrame() {
@@ -150,6 +163,6 @@
       videoElement.load();
       historySpeeds = [];
       stepTimestamps = [];
-      prevFootX = null;
+      prevAnklePos = null;
     }
   });
