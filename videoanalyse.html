@@ -1,117 +1,235 @@
-<script>
-  const videoElement = document.getElementById('inputVideo');
-  const canvasElement = document.getElementById('outputCanvas');
-  const canvasCtx = canvasElement.getContext('2d');
-  const fileInput = document.getElementById('videoUpload');
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Badminton Footwork Rhythm Analytics</title>
 
-  const hitStatus = document.getElementById('hitStatus');
-  const splitStatus = document.getElementById('splitStatus');
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
-  let hitActiveFrames = 0;
-  let lastWristY = null;
-  let prevReceiverHipY = null;
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0d1117;
+      color: #e6edf3;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
 
-  // MediaPipe Pose Instanz
-  const pose = new Pose({
-    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-  });
+    h1 { margin-bottom: 5px; color: #58a6ff; }
+    .subtitle { color: #8b949e; margin-bottom: 20px; }
 
-  pose.setOptions({
-    modelComplexity: 1,
-    smoothLandmarks: true,
-    minDetectionConfidence: 0.15, // Sehr sensibel für weit entfernte Spieler
-    minTrackingConfidence: 0.15
-  });
+    .controls {
+      margin-bottom: 20px;
+      display: flex;
+      gap: 15px;
+    }
 
-  pose.onResults((results) => {
-    canvasElement.width = videoElement.clientWidth;
-    canvasElement.height = videoElement.clientHeight;
+    select, input[type="file"] {
+      background: #161b22;
+      color: #fff;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #30363d;
+      cursor: pointer;
+    }
 
-    canvasCtx.save();
-    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    .video-container {
+      position: relative;
+      max-width: 90vw;
+      max-height: 55vh;
+      display: flex;
+      justify-content: center;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
 
-    if (results.poseLandmarks) {
-      const landmarks = results.poseLandmarks;
+    video { max-width: 100%; max-height: 55vh; }
+    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
 
-      // Draw Visual Skeleton
-      drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
-      drawLandmarks(canvasCtx, landmarks, { color: '#ff0844', lineWidth: 1, radius: 3 });
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 15px;
+      width: 90vw;
+      max-width: 800px;
+      margin-top: 20px;
+    }
 
-      // 1. SCHLAG-DETEKTION (Hand/Racket oben & Peitschenbewegung)
-      const wrist = landmarks[16];
-      const shoulder = landmarks[12];
-      const hip = landmarks[24];
+    .metric-card {
+      background-color: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 15px;
+      text-align: center;
+    }
 
-      if (wrist && shoulder && wrist.visibility > 0.2) {
-        if (lastWristY !== null) {
-          const speedY = lastWristY - wrist.y;
-          // Wenn die Hand weit oben ist und sich schlagartig bewegt
-          if (wrist.y < shoulder.y && speedY > 0.012) {
-            hitActiveFrames = 15; // Schlag-Marker für ca. 0.5s aktivieren
-          }
-        }
-        lastWristY = wrist.y;
-      }
+    .metric-card h3 { margin: 0 0 10px 0; font-size: 0.85rem; color: #8b949e; text-transform: uppercase; }
+    .metric-value { font-size: 1.4rem; font-weight: bold; color: #58a6ff; }
+    .status-good { color: #3fb950 !important; }
+    .status-warn { color: #d29922 !important; }
+  </style>
+</head>
+<body>
 
-      // 2. SPLIT-STEP MONITORING (Hüft-Dip des Empfängers)
-      if (hip && hip.visibility > 0.2) {
-        if (prevReceiverHipY !== null) {
-          const dip = hip.y - prevReceiverHipY;
-          
-          if (hitActiveFrames > 0) {
-            // Roter Punkt am Kontaktpunkt
-            const wX = wrist.x * canvasElement.width;
-            const wY = wrist.y * canvasElement.height;
+  <h1>Footwork Rhythm Analyzer</h1>
+  <div class="subtitle">Analyse der Bewegungsgleichmäßigkeit (Benchmark: Momota / LCW)</div>
+  
+  <div class="controls">
+    <input type="file" id="videoUpload" accept="video/*" />
+    <select id="proModel">
+      <option value="lcw">Vorbild: Lee Chong Wei (Rechtshänder - Explosiv)</option>
+      <option value="momota">Vorbild: Kento Momota 2018 (Linkshänder - Kontrolliert/Flüssig)</option>
+    </select>
+  </div>
 
-            canvasCtx.beginPath();
-            canvasCtx.arc(wX, wY - 20, 18, 0, 2 * Math.PI);
-            canvasCtx.fillStyle = '#ff0000';
-            canvasCtx.fill();
-            canvasCtx.strokeStyle = '#ffffff';
-            canvasCtx.lineWidth = 2;
-            canvasCtx.stroke();
+  <div class="video-container">
+    <video id="inputVideo" controls></video>
+    <canvas id="outputCanvas"></canvas>
+  </div>
 
-            hitStatus.innerText = '💥 KONTAKTPUNKT (ROT)';
-            hitStatus.className = 'metric-value status-late';
+  <div class="dashboard">
+    <div class="metric-card">
+      <h3>Flüssigkeit / Rhythmus</h3>
+      <div id="rhythmScore" class="metric-value">0%</div>
+    </div>
+    <div class="metric-card">
+      <h3>Schritt-Frequenz</h3>
+      <div id="cadenceValue" class="metric-value">0 Schritte/Min</div>
+    </div>
+    <div class="metric-card">
+      <h3>Bewegungs-Flow</h3>
+      <div id="flowStatus" class="metric-value">Starte Video...</div>
+    </div>
+  </div>
 
-            if (dip > 0.004) {
-              splitStatus.innerText = '🎯 PERFEKT! Split-Step erkannt';
-              splitStatus.className = 'metric-value status-perfect';
+  <script>
+    const videoElement = document.getElementById('inputVideo');
+    const canvasElement = document.getElementById('outputCanvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const fileInput = document.getElementById('videoUpload');
+
+    const rhythmScore = document.getElementById('rhythmScore');
+    const cadenceValue = document.getElementById('cadenceValue');
+    const flowStatus = document.getElementById('flowStatus');
+
+    let historySpeeds = [];
+    let prevFootX = null;
+    let prevFootY = null;
+
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.3,
+      minTrackingConfidence: 0.3
+    });
+
+    pose.onResults((results) => {
+      canvasElement.width = videoElement.clientWidth;
+      canvasElement.height = videoElement.clientHeight;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        const landmarks = results.poseLandmarks;
+
+        // Füße & Beine visualisieren
+        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#ffe600', lineWidth: 1, radius: 4 });
+
+        const leftAnkle = landmarks[27];
+        const rightAnkle = landmarks[28];
+
+        if (leftAnkle && rightAnkle) {
+          const currentFootX = (leftAnkle.x + rightAnkle.x) / 2;
+          const currentFootY = (leftAnkle.y + rightAnkle.y) / 2;
+
+          if (prevFootX !== null) {
+            // Distanzberechnung von Frame zu Frame (Footwork Speed)
+            const dx = (currentFootX - prevFootX) * canvasElement.width;
+            const dy = (currentFootY - prevFootY) * canvasElement.height;
+            const stepSpeed = Math.sqrt(dx * dx + dy * dy);
+
+            historySpeeds.push(stepSpeed);
+            if (historySpeeds.length > 30) historySpeeds.shift(); // Letzte 30 Frames speichern
+
+            // 1. RHYTHMUS-DYNAMIK BERECHNEN (Varianz-Analyse)
+            const avgSpeed = historySpeeds.reduce((a, b) => a + b, 0) / historySpeeds.length;
+            
+            // Standardabweichung für Gleichmäßigkeit
+            const variance = historySpeeds.reduce((sum, val) => sum + Math.pow(val - avgSpeed, 2), 0) / historySpeeds.length;
+            const smoothness = Math.max(0, Math.min(100, Math.round(100 - (variance * 2))));
+
+            rhythmScore.innerText = `${smoothness}%`;
+
+            if (smoothness > 70) {
+              rhythmScore.className = 'metric-value status-good';
+              flowStatus.innerText = '✨ Flüssiger Pro-Flow';
+              flowStatus.className = 'metric-value status-good';
+            } else {
+              rhythmScore.className = 'metric-value status-warn';
+              flowStatus.innerText = '⚠️ Ungleichmäßige Schritte';
+              flowStatus.className = 'metric-value status-warn';
             }
+
+            // 2. RHYTHMUS-KURVE AUF DAS CANVAS ZEICHNEN
+            canvasCtx.beginPath();
+            canvasCtx.strokeStyle = '#3fb950';
+            canvasCtx.lineWidth = 3;
+
+            const graphWidth = 150;
+            const graphHeight = 50;
+            const startX = canvasElement.width - graphWidth - 20;
+            const startY = 20;
+
+            // Hintergrund-Box für den Graphen
+            canvasCtx.fillStyle = 'rgba(22, 27, 34, 0.8)';
+            canvasCtx.fillRect(startX - 10, startY - 10, graphWidth + 20, graphHeight + 20);
+
+            historySpeeds.forEach((spd, idx) => {
+              const x = startX + (idx * (graphWidth / 30));
+              const y = startY + graphHeight - Math.min(graphHeight, spd * 2);
+              if (idx === 0) canvasCtx.moveTo(x, y);
+              else canvasCtx.lineTo(x, y);
+            });
+            canvasCtx.stroke();
           }
+
+          prevFootX = currentFootX;
+          prevFootY = currentFootY;
         }
-        prevReceiverHipY = hip.y;
       }
+    });
 
-      if (hitActiveFrames > 0) {
-        hitActiveFrames--;
-      } else {
-        hitStatus.innerText = 'Warte auf Schlag...';
-        hitStatus.className = 'metric-value';
+    async function processFrame() {
+      if (!videoElement.paused && !videoElement.ended) {
+        await pose.send({ image: videoElement });
+        requestAnimationFrame(processFrame);
       }
     }
-    canvasCtx.restore();
-  });
 
-  async function processFrame() {
-    if (!videoElement.paused && !videoElement.ended) {
-      await pose.send({ image: videoElement });
-      requestAnimationFrame(processFrame);
-    }
-  }
+    videoElement.addEventListener('play', () => processFrame());
 
-  videoElement.addEventListener('play', () => {
-    processFrame();
-  });
-
-  fileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      videoElement.src = URL.createObjectURL(file);
-      videoElement.load();
-      hitActiveFrames = 0;
-      lastWristY = null;
-      prevReceiverHipY = null;
-    }
-  });
-</script>
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        videoElement.src = URL.createObjectURL(file);
+        videoElement.load();
+        historySpeeds = [];
+        prevFootX = null;
+      }
+    });
+  </script>
+</body>
+</html>
