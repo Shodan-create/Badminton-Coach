@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Badminton Coach - Automatische KI-Analyse</title>
+  <title>Badminton Coach - Pro Analytics</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -11,9 +11,9 @@
 
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background-color: #121212;
-      color: #ffffff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #0d1117;
+      color: #e6edf3;
       margin: 0;
       padding: 20px;
       display: flex;
@@ -22,7 +22,13 @@
     }
 
     h1 {
-      margin-bottom: 10px;
+      margin-bottom: 5px;
+      color: #58a6ff;
+    }
+
+    .subtitle {
+      color: #8b949e;
+      margin-bottom: 20px;
     }
 
     .controls {
@@ -30,26 +36,28 @@
     }
 
     input[type="file"] {
-      background: #1e1e1e;
+      background: #161b22;
       color: #fff;
       padding: 10px;
-      border-radius: 5px;
-      border: 1px solid #333;
+      border-radius: 6px;
+      border: 1px solid #30363d;
       cursor: pointer;
     }
 
     .video-container {
       position: relative;
       max-width: 90vw;
-      max-height: 70vh;
+      max-height: 65vh;
       display: flex;
       justify-content: center;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      overflow: hidden;
     }
 
     video {
       max-width: 100%;
-      max-height: 70vh;
-      border-radius: 8px;
+      max-height: 65vh;
     }
 
     canvas {
@@ -61,33 +69,45 @@
       pointer-events: none;
     }
 
-    /* Feedback-Box für automatische Hinweise */
-    #feedbackBox {
-      margin-top: 15px;
-      padding: 12px 20px;
-      border-radius: 6px;
-      font-weight: bold;
-      font-size: 1.1rem;
-      background-color: #1e1e1e;
-      border: 2px solid #444;
-      min-width: 300px;
+    /* Profi-Dashboard Styles */
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 15px;
+      width: 90vw;
+      max-width: 900px;
+      margin-top: 20px;
+    }
+
+    .metric-card {
+      background-color: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 15px;
       text-align: center;
     }
 
-    .status-ok {
-      color: #00ff66;
-      border-color: #00ff66 !important;
+    .metric-card h3 {
+      margin: 0 0 10px 0;
+      font-size: 0.9rem;
+      color: #8b949e;
+      text-transform: uppercase;
     }
 
-    .status-warning {
-      color: #ff3333;
-      border-color: #ff3333 !important;
+    .metric-value {
+      font-size: 1.5rem;
+      font-weight: bold;
+      color: #58a6ff;
     }
+
+    .status-good { color: #3fb950 !important; }
+    .status-warn { color: #d29922 !important; }
   </style>
 </head>
 <body>
 
-  <h1>Badminton KI Video-Analyse</h1>
+  <h1>Badminton Pro Analytics</h1>
+  <div class="subtitle">Biomechanische KI-Analyse & Performance Metrics</div>
   
   <div class="controls">
     <input type="file" id="videoUpload" accept="video/*" />
@@ -98,26 +118,42 @@
     <canvas id="outputCanvas"></canvas>
   </div>
 
-  <div id="feedbackBox">Lade ein Video hoch, um die Analyse zu starten.</div>
+  <div class="dashboard">
+    <div class="metric-card">
+      <h3>Schlagarm-Streckung</h3>
+      <div id="reachValue" class="metric-value">0%</div>
+    </div>
+    <div class="metric-card">
+      <h3>Hand-Geschwindigkeit</h3>
+      <div id="speedValue" class="metric-value">0 px/f</div>
+    </div>
+    <div class="metric-card">
+      <h3>Aushol-Status</h3>
+      <div id="prepStatus" class="metric-value">-</div>
+    </div>
+  </div>
 
   <script>
     const videoElement = document.getElementById('inputVideo');
     const canvasElement = document.getElementById('outputCanvas');
     const canvasCtx = canvasElement.getContext('2d');
     const fileInput = document.getElementById('videoUpload');
-    const feedbackBox = document.getElementById('feedbackBox');
 
-    // Mathematische Hilfsfunktion: Berechnet den Winkel zwischen 3 Punkten (in Grad)
+    // Metrics Elements
+    const reachValue = document.getElementById('reachValue');
+    const speedValue = document.getElementById('speedValue');
+    const prepStatus = document.getElementById('prepStatus');
+
+    // Tracking Variables
+    let lastWristPos = null;
+
     function calculateAngle(p1, p2, p3) {
       const radians = Math.atan2(p3.y - p2.y, p3.x - p2.x) - Math.atan2(p1.y - p2.y, p1.x - p2.x);
       let angle = Math.abs((radians * 180.0) / Math.PI);
-      if (angle > 180.0) {
-        angle = 360.0 - angle;
-      }
+      if (angle > 180.0) angle = 360.0 - angle;
       return Math.round(angle);
     }
 
-    // MediaPipe Pose initialisieren
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
     });
@@ -139,39 +175,67 @@
       if (results.poseLandmarks) {
         const landmarks = results.poseLandmarks;
 
-        // Skelett auf den Canvas zeichnen
-        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2, radius: 5 });
+        // Custom Skeleton Styling (Pro Look: Cyan / Orange)
+        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 3 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#ff0844', lineWidth: 1, radius: 4 });
 
-        // AUTOMATISCHE BADMINTON-ANALYSE:
-        // Indizes für den rechten Arm: Schulter (12), Ellbogen (14), Handgelenk (16)
+        // Körperpunkte Rechter Arm (Schulter 12, Ellbogen 14, Handgelenk 16)
         const shoulder = landmarks[12];
         const elbow = landmarks[14];
         const wrist = landmarks[16];
 
-        // Nur berechnen, wenn die Punkte sichtbar sind
         if (shoulder.visibility > 0.5 && elbow.visibility > 0.5 && wrist.visibility > 0.5) {
-          const elbowAngle = calculateAngle(shoulder, elbow, wrist);
-
-          // 1. Winkel direkt beim Ellbogen im Video anzeigen
-          const canvasX = elbow.x * canvasElement.width;
-          const canvasY = elbow.y * canvasElement.height;
           
-          canvasCtx.fillStyle = '#FFFF00';
-          canvasCtx.font = 'bold 24px Arial';
-          canvasCtx.fillText(`${elbowAngle}°`, canvasX + 15, canvasY);
-
-          // 2. Automatisches Coaching-Feedback prüfen
-          if (elbowAngle < 90) {
-            feedbackBox.className = 'status-warning';
-            feedbackBox.innerText = `⚠️ Ellbogen zu tief (${elbowAngle}°)! Führungshand höher nehmen!`;
+          // 1. Arm-Streckung (Biomechanical Reach / High Contact Point)
+          const armAngle = calculateAngle(shoulder, elbow, wrist);
+          // Streckung in Prozent (180 Grad = 100% gestreckt)
+          const extensionPercent = Math.min(100, Math.round((armAngle / 180) * 100));
+          
+          reachValue.innerText = `${extensionPercent}% (${armAngle}°)`;
+          if (extensionPercent > 85) {
+            reachValue.className = 'metric-value status-good';
           } else {
-            feedbackBox.className = 'status-ok';
-            feedbackBox.innerText = `✅ Gute Ellbogenhaltung (${elbowAngle}°)`;
+            reachValue.className = 'metric-value status-warn';
           }
-        } else {
-          feedbackBox.className = '';
-          feedbackBox.innerText = 'Positioniere den Spieler gut sichtbar im Bild.';
+
+          // 2. Hand-Geschwindigkeit (Tracking von Frame zu Frame)
+          if (lastWristPos) {
+            const dx = (wrist.x - lastWristPos.x) * canvasElement.width;
+            const dy = (wrist.y - lastWristPos.y) * canvasElement.height;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const speed = Math.round(distance);
+
+            speedValue.innerText = `${speed} px/frame`;
+            if (speed > 25) {
+              speedValue.className = 'metric-value status-good';
+            } else {
+              speedValue.className = 'metric-value';
+            }
+          }
+          lastWristPos = { x: wrist.x, y: wrist.y };
+
+          // 3. Aushol-Ablauf & Racket Prep Status
+          if (wrist.y < shoulder.y && armAngle < 120) {
+            prepStatus.innerText = '⚡ Ausholphase';
+            prepStatus.className = 'metric-value status-good';
+          } else if (wrist.y < shoulder.y && armAngle >= 160) {
+            prepStatus.innerText = '💥 Treffpunkt (Peak)';
+            prepStatus.className = 'metric-value status-good';
+          } else {
+            prepStatus.innerText = 'Bereit / Neutral';
+            prepStatus.className = 'metric-value';
+          }
+
+          // HUD Overlay auf dem Canvas zeichnen
+          const wristX = wrist.x * canvasElement.width;
+          const wristY = wrist.y * canvasElement.height;
+
+          // Treffpunkt-Targeting Ring zeichnen
+          canvasCtx.beginPath();
+          canvasCtx.arc(wristX, wristY, 15, 0, 2 * Math.PI);
+          canvasCtx.strokeStyle = armAngle > 160 ? '#3fb950' : '#58a6ff';
+          canvasCtx.lineWidth = 3;
+          canvasCtx.stroke();
         }
       }
       canvasCtx.restore();
@@ -194,6 +258,7 @@
         const url = URL.createObjectURL(file);
         videoElement.src = url;
         videoElement.load();
+        lastWristPos = null;
       }
     });
   </script>
