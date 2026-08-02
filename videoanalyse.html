@@ -1,235 +1,155 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Badminton Footwork Rhythm Analytics</title>
+  const videoElement = document.getElementById('inputVideo');
+  const canvasElement = document.getElementById('outputCanvas');
+  const canvasCtx = canvasElement.getContext('2d');
+  const fileInput = document.getElementById('videoUpload');
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  const rhythmScore = document.getElementById('rhythmScore');
+  const cadenceValue = document.getElementById('cadenceValue');
+  const flowStatus = document.getElementById('flowStatus');
 
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #0d1117;
-      color: #e6edf3;
-      margin: 0;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
+  let historySpeeds = [];
+  let stepTimestamps = []; // Speichert Zeitpunkte von echten Schritten
+  let prevFootX = null;
+  let prevFootY = null;
+  let isMovingUp = false;
 
-    h1 { margin-bottom: 5px; color: #58a6ff; }
-    .subtitle { color: #8b949e; margin-bottom: 20px; }
+  const pose = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+  });
 
-    .controls {
-      margin-bottom: 20px;
-      display: flex;
-      gap: 15px;
-    }
+  pose.setOptions({
+    modelComplexity: 1,
+    smoothLandmarks: true,
+    minDetectionConfidence: 0.3,
+    minTrackingConfidence: 0.3
+  });
 
-    select, input[type="file"] {
-      background: #161b22;
-      color: #fff;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #30363d;
-      cursor: pointer;
-    }
+  pose.onResults((results) => {
+    canvasElement.width = videoElement.clientWidth;
+    canvasElement.height = videoElement.clientHeight;
 
-    .video-container {
-      position: relative;
-      max-width: 90vw;
-      max-height: 55vh;
-      display: flex;
-      justify-content: center;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      overflow: hidden;
-    }
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    video { max-width: 100%; max-height: 55vh; }
-    canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    if (results.poseLandmarks) {
+      const landmarks = results.poseLandmarks;
 
-    .dashboard {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 15px;
-      width: 90vw;
-      max-width: 800px;
-      margin-top: 20px;
-    }
+      drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
+      drawLandmarks(canvasCtx, landmarks, { color: '#ffe600', lineWidth: 1, radius: 4 });
 
-    .metric-card {
-      background-color: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      padding: 15px;
-      text-align: center;
-    }
+      const leftAnkle = landmarks[27];
+      const rightAnkle = landmarks[28];
 
-    .metric-card h3 { margin: 0 0 10px 0; font-size: 0.85rem; color: #8b949e; text-transform: uppercase; }
-    .metric-value { font-size: 1.4rem; font-weight: bold; color: #58a6ff; }
-    .status-good { color: #3fb950 !important; }
-    .status-warn { color: #d29922 !important; }
-  </style>
-</head>
-<body>
+      if (leftAnkle && rightAnkle) {
+        const currentFootX = (leftAnkle.x + rightAnkle.x) / 2;
+        const currentFootY = (leftAnkle.y + rightAnkle.y) / 2;
 
-  <h1>Footwork Rhythm Analyzer</h1>
-  <div class="subtitle">Analyse der Bewegungsgleichmäßigkeit (Benchmark: Momota / LCW)</div>
-  
-  <div class="controls">
-    <input type="file" id="videoUpload" accept="video/*" />
-    <select id="proModel">
-      <option value="lcw">Vorbild: Lee Chong Wei (Rechtshänder - Explosiv)</option>
-      <option value="momota">Vorbild: Kento Momota 2018 (Linkshänder - Kontrolliert/Flüssig)</option>
-    </select>
-  </div>
+        if (prevFootX !== null) {
+          const dx = (currentFootX - prevFootX) * canvasElement.width;
+          const dy = (currentFootY - prevFootY) * canvasElement.height;
+          const stepSpeed = Math.sqrt(dx * dx + dy * dy);
 
-  <div class="video-container">
-    <video id="inputVideo" controls></video>
-    <canvas id="outputCanvas"></canvas>
-  </div>
+          historySpeeds.push(stepSpeed);
+          if (historySpeeds.length > 45) historySpeeds.shift(); // Schaut sich ca. 1.5 Sekunden an
 
-  <div class="dashboard">
-    <div class="metric-card">
-      <h3>Flüssigkeit / Rhythmus</h3>
-      <div id="rhythmScore" class="metric-value">0%</div>
-    </div>
-    <div class="metric-card">
-      <h3>Schritt-Frequenz</h3>
-      <div id="cadenceValue" class="metric-value">0 Schritte/Min</div>
-    </div>
-    <div class="metric-card">
-      <h3>Bewegungs-Flow</h3>
-      <div id="flowStatus" class="metric-value">Starte Video...</div>
-    </div>
-  </div>
-
-  <script>
-    const videoElement = document.getElementById('inputVideo');
-    const canvasElement = document.getElementById('outputCanvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const fileInput = document.getElementById('videoUpload');
-
-    const rhythmScore = document.getElementById('rhythmScore');
-    const cadenceValue = document.getElementById('cadenceValue');
-    const flowStatus = document.getElementById('flowStatus');
-
-    let historySpeeds = [];
-    let prevFootX = null;
-    let prevFootY = null;
-
-    const pose = new Pose({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-    });
-
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.3,
-      minTrackingConfidence: 0.3
-    });
-
-    pose.onResults((results) => {
-      canvasElement.width = videoElement.clientWidth;
-      canvasElement.height = videoElement.clientHeight;
-
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-      if (results.poseLandmarks) {
-        const landmarks = results.poseLandmarks;
-
-        // Füße & Beine visualisieren
-        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#ffe600', lineWidth: 1, radius: 4 });
-
-        const leftAnkle = landmarks[27];
-        const rightAnkle = landmarks[28];
-
-        if (leftAnkle && rightAnkle) {
-          const currentFootX = (leftAnkle.x + rightAnkle.x) / 2;
-          const currentFootY = (leftAnkle.y + rightAnkle.y) / 2;
-
-          if (prevFootX !== null) {
-            // Distanzberechnung von Frame zu Frame (Footwork Speed)
-            const dx = (currentFootX - prevFootX) * canvasElement.width;
-            const dy = (currentFootY - prevFootY) * canvasElement.height;
-            const stepSpeed = Math.sqrt(dx * dx + dy * dy);
-
-            historySpeeds.push(stepSpeed);
-            if (historySpeeds.length > 30) historySpeeds.shift(); // Letzte 30 Frames speichern
-
-            // 1. RHYTHMUS-DYNAMIK BERECHNEN (Varianz-Analyse)
-            const avgSpeed = historySpeeds.reduce((a, b) => a + b, 0) / historySpeeds.length;
-            
-            // Standardabweichung für Gleichmäßigkeit
-            const variance = historySpeeds.reduce((sum, val) => sum + Math.pow(val - avgSpeed, 2), 0) / historySpeeds.length;
-            const smoothness = Math.max(0, Math.min(100, Math.round(100 - (variance * 2))));
-
-            rhythmScore.innerText = `${smoothness}%`;
-
-            if (smoothness > 70) {
-              rhythmScore.className = 'metric-value status-good';
-              flowStatus.innerText = '✨ Flüssiger Pro-Flow';
-              flowStatus.className = 'metric-value status-good';
-            } else {
-              rhythmScore.className = 'metric-value status-warn';
-              flowStatus.innerText = '⚠️ Ungleichmäßige Schritte';
-              flowStatus.className = 'metric-value status-warn';
-            }
-
-            // 2. RHYTHMUS-KURVE AUF DAS CANVAS ZEICHNEN
-            canvasCtx.beginPath();
-            canvasCtx.strokeStyle = '#3fb950';
-            canvasCtx.lineWidth = 3;
-
-            const graphWidth = 150;
-            const graphHeight = 50;
-            const startX = canvasElement.width - graphWidth - 20;
-            const startY = 20;
-
-            // Hintergrund-Box für den Graphen
-            canvasCtx.fillStyle = 'rgba(22, 27, 34, 0.8)';
-            canvasCtx.fillRect(startX - 10, startY - 10, graphWidth + 20, graphHeight + 20);
-
-            historySpeeds.forEach((spd, idx) => {
-              const x = startX + (idx * (graphWidth / 30));
-              const y = startY + graphHeight - Math.min(graphHeight, spd * 2);
-              if (idx === 0) canvasCtx.moveTo(x, y);
-              else canvasCtx.lineTo(x, y);
-            });
-            canvasCtx.stroke();
+          // 1. SCHRITTFREQUENZ / CADENCE (PEAK-ERKENNUNG)
+          // Ein Schritt gilt als getätigt, wenn die Bewegung nach einer Beschleunigung wieder abfällt
+          if (stepSpeed > 2.5 && !isMovingUp) {
+            isMovingUp = true;
+            const now = videoElement.currentTime;
+            stepTimestamps.push(now);
+          } else if (stepSpeed < 1.5) {
+            isMovingUp = false;
           }
 
-          prevFootX = currentFootX;
-          prevFootY = currentFootY;
-        }
-      }
-    });
+          // Nur Schritte der letzten 5 Sekunden im Video berücksichtigen
+          const now = videoElement.currentTime;
+          stepTimestamps = stepTimestamps.filter(t => (now - t) <= 5);
 
-    async function processFrame() {
-      if (!videoElement.paused && !videoElement.ended) {
-        await pose.send({ image: videoElement });
-        requestAnimationFrame(processFrame);
+          // Hochrechnen auf Schritte pro Minute (BPM / Cadence)
+          const stepsPerMinute = Math.round((stepTimestamps.length / 5) * 60);
+          cadenceValue.innerText = `${stepsPerMinute} Schritte/Min`;
+
+
+          // 2. STRENGERE & REALISTISCHERE FLÜSSIGKEITS-BERECHNUNG
+          const avgSpeed = historySpeeds.reduce((a, b) => a + b, 0) / historySpeeds.length;
+          
+          // Varianz / Ruckel-Faktor berechnen
+          let varianceSum = 0;
+          for (let i = 0; i < historySpeeds.length; i++) {
+            varianceSum += Math.abs(historySpeeds[i] - avgSpeed);
+          }
+          const meanJerk = varianceSum / historySpeeds.length;
+
+          // Neuer strenger Algorithmus: Ruckler & harte Stops drücken den Score spürbar!
+          // Ein "Pro Flow" liegt meist zwischen 75% und 92%. Nur perfektes Gleiten erreicht >90%.
+          let realisticRhythm = Math.round(100 - (meanJerk * 18));
+          if (realisticRhythm > 98) realisticRhythm = 95; // Hard-Cap für Realismus
+          if (realisticRhythm < 10) realisticRhythm = 10;
+
+          rhythmScore.innerText = `${realisticRhythm}%`;
+
+
+          // 3. HARDCORE-EINSTUFUNG DER STATUS-TEXTE
+          if (realisticRhythm >= 82) {
+            rhythmScore.className = 'metric-value status-good';
+            flowStatus.innerText = '✨ Flüssiger Pro-Flow';
+            flowStatus.className = 'metric-value status-good';
+          } else if (realisticRhythm >= 60) {
+            rhythmScore.className = 'metric-value';
+            flowStatus.innerText = '⚖️ Solider Rhythmus (Tempo-Wechsel)';
+            flowStatus.className = 'metric-value';
+          } else {
+            rhythmScore.className = 'metric-value status-warn';
+            flowStatus.innerText = '⚠️ Stopp-and-Go / Ruckelig';
+            flowStatus.className = 'metric-value status-warn';
+          }
+
+
+          // 4. RHYTHMUS-GRAPH
+          canvasCtx.beginPath();
+          canvasCtx.strokeStyle = realisticRhythm >= 82 ? '#3fb950' : '#d29922';
+          canvasCtx.lineWidth = 2;
+
+          const graphWidth = 160;
+          const graphHeight = 45;
+          const startX = canvasElement.width - graphWidth - 15;
+          const startY = 15;
+
+          canvasCtx.fillStyle = 'rgba(13, 17, 23, 0.85)';
+          canvasCtx.fillRect(startX - 8, startY - 8, graphWidth + 16, graphHeight + 16);
+
+          historySpeeds.forEach((spd, idx) => {
+            const x = startX + (idx * (graphWidth / 45));
+            const y = startY + graphHeight - Math.min(graphHeight, spd * 3);
+            if (idx === 0) canvasCtx.moveTo(x, y);
+            else canvasCtx.lineTo(x, y);
+          });
+          canvasCtx.stroke();
+        }
+
+        prevFootX = currentFootX;
+        prevFootY = currentFootY;
       }
     }
+  });
 
-    videoElement.addEventListener('play', () => processFrame());
+  async function processFrame() {
+    if (!videoElement.paused && !videoElement.ended) {
+      await pose.send({ image: videoElement });
+      requestAnimationFrame(processFrame);
+    }
+  }
 
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        videoElement.src = URL.createObjectURL(file);
-        videoElement.load();
-        historySpeeds = [];
-        prevFootX = null;
-      }
-    });
-  </script>
-</body>
-</html>
+  videoElement.addEventListener('play', () => processFrame());
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      videoElement.src = URL.createObjectURL(file);
+      videoElement.load();
+      historySpeeds = [];
+      stepTimestamps = [];
+      prevFootX = null;
+    }
+  });
