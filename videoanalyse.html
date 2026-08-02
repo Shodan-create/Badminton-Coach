@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Badminton Coach - Pro Analytics</title>
+  <title>Badminton Coach - Footwork & Split-Step Analytics</title>
 
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
@@ -69,7 +69,7 @@
       pointer-events: none;
     }
 
-    /* Profi-Dashboard Styles */
+    /* Dashboard Styles */
     .dashboard {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -95,19 +95,20 @@
     }
 
     .metric-value {
-      font-size: 1.5rem;
+      font-size: 1.4rem;
       font-weight: bold;
       color: #58a6ff;
     }
 
+    .status-active { color: #2f81f7 !important; }
     .status-good { color: #3fb950 !important; }
     .status-warn { color: #d29922 !important; }
   </style>
 </head>
 <body>
 
-  <h1>Badminton Pro Analytics</h1>
-  <div class="subtitle">Biomechanische KI-Analyse & Performance Metrics</div>
+  <h1>Badminton Footwork Analytics</h1>
+  <div class="subtitle">Automatische Split-Step- & Beinarbeits-Analyse</div>
   
   <div class="controls">
     <input type="file" id="videoUpload" accept="video/*" />
@@ -120,16 +121,16 @@
 
   <div class="dashboard">
     <div class="metric-card">
-      <h3>Schlagarm-Streckung</h3>
-      <div id="reachValue" class="metric-value">0%</div>
+      <h3>Split-Step Status</h3>
+      <div id="splitStepStatus" class="metric-value">Bereit...</div>
     </div>
     <div class="metric-card">
-      <h3>Hand-Geschwindigkeit</h3>
-      <div id="speedValue" class="metric-value">0 px/f</div>
+      <h3>Standbreite (Füße/Schulter)</h3>
+      <div id="stanceWidthValue" class="metric-value">0.0x</div>
     </div>
     <div class="metric-card">
-      <h3>Aushol-Status</h3>
-      <div id="prepStatus" class="metric-value">-</div>
+      <h3>Antritts-Geschwindigkeit</h3>
+      <div id="moveSpeedValue" class="metric-value">0 px/f</div>
     </div>
   </div>
 
@@ -139,20 +140,14 @@
     const canvasCtx = canvasElement.getContext('2d');
     const fileInput = document.getElementById('videoUpload');
 
-    // Metrics Elements
-    const reachValue = document.getElementById('reachValue');
-    const speedValue = document.getElementById('speedValue');
-    const prepStatus = document.getElementById('prepStatus');
+    // Dashboard Elements
+    const splitStepStatus = document.getElementById('splitStepStatus');
+    const stanceWidthValue = document.getElementById('stanceWidthValue');
+    const moveSpeedValue = document.getElementById('moveSpeedValue');
 
-    // Tracking Variables
-    let lastWristPos = null;
-
-    function calculateAngle(p1, p2, p3) {
-      const radians = Math.atan2(p3.y - p2.y, p3.x - p2.x) - Math.atan2(p1.y - p2.y, p1.x - p2.x);
-      let angle = Math.abs((radians * 180.0) / Math.PI);
-      if (angle > 180.0) angle = 360.0 - angle;
-      return Math.round(angle);
-    }
+    // Tracking Hilfsvariablen
+    let previousHipY = null;
+    let previousAnkleX = null;
 
     const pose = new Pose({
       locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
@@ -175,66 +170,83 @@
       if (results.poseLandmarks) {
         const landmarks = results.poseLandmarks;
 
-        // Custom Skeleton Styling (Pro Look: Cyan / Orange)
-        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 3 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#ff0844', lineWidth: 1, radius: 4 });
+        // Custom Styling: Unterkörper hervorgehoben (Neon-Gelb)
+        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#ffe600', lineWidth: 1, radius: 4 });
 
-        // Körperpunkte Rechter Arm (Schulter 12, Ellbogen 14, Handgelenk 16)
-        const shoulder = landmarks[12];
-        const elbow = landmarks[14];
-        const wrist = landmarks[16];
+        // Wichtige Punkte für Beinarbeit
+        const leftShoulder = landmarks[11];
+        const rightShoulder = landmarks[12];
+        const leftHip = landmarks[23];
+        const rightHip = landmarks[24];
+        const leftAnkle = landmarks[27];
+        const rightAnkle = landmarks[28];
 
-        if (shoulder.visibility > 0.5 && elbow.visibility > 0.5 && wrist.visibility > 0.5) {
+        // Sichtbarkeitsprüfung
+        if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5 && 
+            leftAnkle.visibility > 0.5 && rightAnkle.visibility > 0.5) {
+
+          // 1. STANDBREITE (Verhältnis Fußabstand zu Schulterabstand)
+          const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
+          const ankleWidth = Math.abs(rightAnkle.x - leftAnkle.x);
           
-          // 1. Arm-Streckung (Biomechanical Reach / High Contact Point)
-          const armAngle = calculateAngle(shoulder, elbow, wrist);
-          // Streckung in Prozent (180 Grad = 100% gestreckt)
-          const extensionPercent = Math.min(100, Math.round((armAngle / 180) * 100));
+          const stanceRatio = shoulderWidth > 0 ? (ankleWidth / shoulderWidth).toFixed(2) : 0;
           
-          reachValue.innerText = `${extensionPercent}% (${armAngle}°)`;
-          if (extensionPercent > 85) {
-            reachValue.className = 'metric-value status-good';
+          stanceWidthValue.innerText = `${stanceRatio}x Schulterbreite`;
+          if (stanceRatio >= 1.2 && stanceRatio <= 1.8) {
+            stanceWidthValue.className = 'metric-value status-good';
+          } else if (stanceRatio < 1.0) {
+            stanceWidthValue.className = 'metric-value status-warn';
           } else {
-            reachValue.className = 'metric-value status-warn';
+            stanceWidthValue.className = 'metric-value';
           }
 
-          // 2. Hand-Geschwindigkeit (Tracking von Frame zu Frame)
-          if (lastWristPos) {
-            const dx = (wrist.x - lastWristPos.x) * canvasElement.width;
-            const dy = (wrist.y - lastWristPos.y) * canvasElement.height;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const speed = Math.round(distance);
+          // 2. SPLIT-STEP ERKENNUNG (Hüft-Dip / Schwerpunkt-Absenkung)
+          const currentHipY = (leftHip.y + rightHip.y) / 2;
 
-            speedValue.innerText = `${speed} px/frame`;
-            if (speed > 25) {
-              speedValue.className = 'metric-value status-good';
+          if (previousHipY !== null) {
+            const hipVelocityY = currentHipY - previousHipY; // Positiv = Abwärtsbewegung (Dip)
+
+            // Schnelles Absenken der Hüfte signalisiert den Split-Step Landing Dip
+            if (hipVelocityY > 0.012 && stanceRatio >= 1.1) {
+              splitStepStatus.innerText = '⚡ SPLIT-STEP DETEKTIERT';
+              splitStepStatus.className = 'metric-value status-good';
+            } else if (hipVelocityY < -0.012) {
+              splitStepStatus.innerText = '🚀 Abdruck / Sprung';
+              splitStepStatus.className = 'metric-value status-active';
             } else {
-              speedValue.className = 'metric-value';
+              splitStepStatus.innerText = 'In Bewegung / Neutral';
+              splitStepStatus.className = 'metric-value';
             }
           }
-          lastWristPos = { x: wrist.x, y: wrist.y };
+          previousHipY = currentHipY;
 
-          // 3. Aushol-Ablauf & Racket Prep Status
-          if (wrist.y < shoulder.y && armAngle < 120) {
-            prepStatus.innerText = '⚡ Ausholphase';
-            prepStatus.className = 'metric-value status-good';
-          } else if (wrist.y < shoulder.y && armAngle >= 160) {
-            prepStatus.innerText = '💥 Treffpunkt (Peak)';
-            prepStatus.className = 'metric-value status-good';
-          } else {
-            prepStatus.innerText = 'Bereit / Neutral';
-            prepStatus.className = 'metric-value';
+          // 3. ANTRITTS-GESCHWINDIGKEIT / FOOTWORK VELOCITY
+          const currentAnkleX = (leftAnkle.x + rightAnkle.x) / 2;
+          if (previousAnkleX !== null) {
+            const lateralDisplacement = Math.abs(currentAnkleX - previousAnkleX) * canvasElement.width;
+            const lateralSpeed = Math.round(lateralDisplacement);
+
+            moveSpeedValue.innerText = `${lateralSpeed} px/frame`;
+            if (lateralSpeed > 12) {
+              moveSpeedValue.className = 'metric-value status-good';
+            } else {
+              moveSpeedValue.className = 'metric-value';
+            }
           }
+          previousAnkleX = currentAnkleX;
 
-          // HUD Overlay auf dem Canvas zeichnen
-          const wristX = wrist.x * canvasElement.width;
-          const wristY = wrist.y * canvasElement.height;
+          // Visualisierungs-Linie für Standbreite direkt am Boden zeichnen
+          const leftAnkleX = leftAnkle.x * canvasElement.width;
+          const leftAnkleY = leftAnkle.y * canvasElement.height;
+          const rightAnkleX = rightAnkle.x * canvasElement.width;
+          const rightAnkleY = rightAnkle.y * canvasElement.height;
 
-          // Treffpunkt-Targeting Ring zeichnen
           canvasCtx.beginPath();
-          canvasCtx.arc(wristX, wristY, 15, 0, 2 * Math.PI);
-          canvasCtx.strokeStyle = armAngle > 160 ? '#3fb950' : '#58a6ff';
-          canvasCtx.lineWidth = 3;
+          canvasCtx.moveTo(leftAnkleX, leftAnkleY);
+          canvasCtx.lineTo(rightAnkleX, rightAnkleY);
+          canvasCtx.strokeStyle = (stanceRatio >= 1.2 && stanceRatio <= 1.8) ? '#3fb950' : '#d29922';
+          canvasCtx.lineWidth = 4;
           canvasCtx.stroke();
         }
       }
@@ -258,7 +270,8 @@
         const url = URL.createObjectURL(file);
         videoElement.src = url;
         videoElement.load();
-        lastWristPos = null;
+        previousHipY = null;
+        previousAnkleX = null;
       }
     });
   </script>
