@@ -1,270 +1,136 @@
-<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Badminton Coach - Auto Split-Step & Hit Detection</title>
+<script>
+  const videoElement = document.getElementById('inputVideo');
+  const canvasElement = document.getElementById('outputCanvas');
+  const canvasCtx = canvasElement.getContext('2d');
+  const fileInput = document.getElementById('videoUpload');
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+  const hitStatus = document.getElementById('hitStatus');
+  const splitStatus = document.getElementById('splitStatus');
 
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #0d1117;
-      color: #e6edf3;
-      margin: 0;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+  let lastWristY = null;
+  let lastWristSpeed = 0;
+  let hitActiveFrames = 0;
+  let playerReceiverHipY = null;
+  let splitDetectedInWindow = false;
+
+  // MediaPipe Pose mit hoher Präzision für kleine/entfernte Personen
+  const pose = new Pose({
+    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+  });
+
+  pose.setOptions({
+    modelComplexity: 2, // 2 = Höchste Präzision für entfernte Personen auf dem Feld
+    smoothLandmarks: true,
+    minDetectionConfidence: 0.2, // Niedrigerer Schwellenwert, damit kleine Figuren erkannt werden
+    minTrackingConfidence: 0.2
+  });
+
+  pose.onResults((results) => {
+    // Canvas exakt auf die gerenderte Videogröße skalieren
+    if (videoElement.videoWidth && videoElement.videoHeight) {
+      canvasElement.width = videoElement.clientWidth;
+      canvasElement.height = videoElement.clientHeight;
     }
 
-    h1 {
-      margin-bottom: 5px;
-      color: #58a6ff;
-    }
+    canvasCtx.save();
+    canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
 
-    .subtitle {
-      color: #8b949e;
-      margin-bottom: 20px;
-    }
+    if (results.poseLandmarks) {
+      const landmarks = results.poseLandmarks;
 
-    .controls {
-      margin-bottom: 20px;
-    }
+      // Skelett & Punkte zeichnen
+      drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00f2fe', lineWidth: 2 });
+      drawLandmarks(canvasCtx, landmarks, { color: '#ff0844', lineWidth: 1, radius: 3 });
 
-    input[type="file"] {
-      background: #161b22;
-      color: #fff;
-      padding: 10px;
-      border-radius: 6px;
-      border: 1px solid #30363d;
-      cursor: pointer;
-    }
+      // 1. SCHLAGEINGANG (Schläger-Hand)
+      const wrist = landmarks[16];
+      const shoulder = landmarks[12];
 
-    .video-container {
-      position: relative;
-      max-width: 90vw;
-      max-height: 60vh;
-      display: flex;
-      justify-content: center;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      overflow: hidden;
-    }
+      if (wrist && shoulder && wrist.visibility > 0.2) {
+        const currentWristY = wrist.y;
 
-    video {
-      max-width: 100%;
-      max-height: 60vh;
-    }
+        if (lastWristY !== null) {
+          const wristSpeedY = (lastWristY - currentWristY);
 
-    canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-    }
-
-    .dashboard {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-      gap: 15px;
-      width: 90vw;
-      max-width: 800px;
-      margin-top: 20px;
-    }
-
-    .metric-card {
-      background-color: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 8px;
-      padding: 20px;
-      text-align: center;
-    }
-
-    .metric-card h3 {
-      margin: 0 0 10px 0;
-      font-size: 0.9rem;
-      color: #8b949e;
-      text-transform: uppercase;
-    }
-
-    .metric-value {
-      font-size: 1.5rem;
-      font-weight: bold;
-      color: #58a6ff;
-    }
-
-    .status-perfect { color: #3fb950 !important; }
-    .status-early { color: #d29922 !important; }
-    .status-late { color: #f85149 !important; }
-  </style>
-</head>
-<body>
-
-  <h1>Badminton Auto-Timing Analytics</h1>
-  <div class="subtitle">Automatische Schlag-Erkennung (Rot) & Split-Step-Prüfung</div>
-  
-  <div class="controls">
-    <input type="file" id="videoUpload" accept="video/*" />
-  </div>
-
-  <div class="video-container">
-    <video id="inputVideo" controls></video>
-    <canvas id="outputCanvas"></canvas>
-  </div>
-
-  <div class="dashboard">
-    <div class="metric-card">
-      <h3>Gegner Kontaktpunkt</h3>
-      <div id="hitStatus" class="metric-value">Warte auf Schlag...</div>
-    </div>
-    <div class="metric-card">
-      <h3>Split-Step Timing (Empfänger)</h3>
-      <div id="splitStatus" class="metric-value">Analysiere...</div>
-    </div>
-  </div>
-
-  <script>
-    const videoElement = document.getElementById('inputVideo');
-    const canvasElement = document.getElementById('outputCanvas');
-    const canvasCtx = canvasElement.getContext('2d');
-    const fileInput = document.getElementById('videoUpload');
-
-    const hitStatus = document.getElementById('hitStatus');
-    const splitStatus = document.getElementById('splitStatus');
-
-    // Tracking-Speicher für Bewegungsmuster
-    let lastWristY = null;
-    let lastWristSpeed = 0;
-    let hitActiveFrames = 0; // Wie lange der rote Marker sichtbar bleibt
-
-    let playerReceiverHipY = null;
-    let splitDetectedInWindow = false;
-
-    const pose = new Pose({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-    });
-
-    pose.setOptions({
-      modelComplexity: 1,
-      smoothLandmarks: true,
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5
-    });
-
-    pose.onResults((results) => {
-      canvasElement.width = videoElement.videoWidth;
-      canvasElement.height = videoElement.videoHeight;
-
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-
-      if (results.poseLandmarks) {
-        const landmarks = results.poseLandmarks;
-
-        // Skelett zeichnen
-        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#58a6ff', lineWidth: 2 });
-        drawLandmarks(canvasCtx, landmarks, { color: '#3fb950', lineWidth: 1, radius: 3 });
-
-        // 1. SCHLAGERKENNUNG (Schläger / Hand oben & maximale Geschwindigkeitsänderung)
-        const wrist = landmarks[16]; // Rechecktes Handgelenk
-        const shoulder = landmarks[12];
-        const hip = landmarks[24];
-
-        if (wrist.visibility > 0.5 && shoulder.visibility > 0.5) {
-          const currentWristY = wrist.y;
-
-          if (lastWristY !== null) {
-            const wristSpeedY = (lastWristY - currentWristY); // Nach oben gerichtet
-
-            // Treffpunkt-Bedingung: Hand über Schulter + plötzlicher Peitschenstopp / Beschleunigung
-            if (wrist.y < shoulder.y && wristSpeedY > 0.02 && lastWristSpeed > wristSpeedY) {
-              hitActiveFrames = 12; // Marker für 12 Frames (~0.4s) auf ROT setzen
-              splitDetectedInWindow = false;
-            }
-            lastWristSpeed = wristSpeedY;
+          if (wrist.y < shoulder.y && wristSpeedY > 0.015) {
+            hitActiveFrames = 10;
+            splitDetectedInWindow = false;
           }
-          lastWristY = currentWristY;
+        }
+        lastWristY = currentWristY;
+      }
+
+      // 2. ROTER KONTAKTPUNKT
+      if (hitActiveFrames > 0) {
+        hitActiveFrames--;
+
+        const wristX = wrist.x * canvasElement.width;
+        const wristY = wrist.y * canvasElement.height;
+
+        canvasCtx.beginPath();
+        canvasCtx.arc(wristX, wristY, 20, 0, 2 * Math.PI);
+        canvasCtx.fillStyle = 'rgba(255, 0, 0, 0.85)';
+        canvasCtx.fill();
+        canvasCtx.strokeStyle = '#FFFFFF';
+        canvasCtx.lineWidth = 2;
+        canvasCtx.stroke();
+
+        hitStatus.innerText = '💥 SCHLAG ERFOLGT (ROT)';
+        hitStatus.className = 'metric-value status-late';
+
+        // 3. SPLIT-STEP MONITORING
+        const leftHip = landmarks[23];
+        const rightHip = landmarks[24];
+
+        if (leftHip && rightHip) {
+          const currentHipY = (leftHip.y + rightHip.y) / 2;
+
+          if (playerReceiverHipY !== null) {
+            const hipDip = currentHipY - playerReceiverHipY;
+            if (hipDip > 0.005) {
+              splitDetectedInWindow = true;
+            }
+          }
+          playerReceiverHipY = currentHipY;
         }
 
-        // 2. ROTER KONTAKTPUNKT ZEICHNEN
-        if (hitActiveFrames > 0) {
-          hitActiveFrames--;
-
-          const wristX = wrist.x * canvasElement.width;
-          const wristY = wrist.y * canvasElement.height;
-
-          // Roter pulsierender Schlag-Marker am Schläger/Handgelenk
-          canvasCtx.beginPath();
-          canvasCtx.arc(wristX, wristY - 30, 25, 0, 2 * Math.PI);
-          canvasCtx.fillStyle = 'rgba(255, 0, 0, 0.8)';
-          canvasCtx.fill();
-          canvasCtx.strokeStyle = '#FFFFFF';
-          canvasCtx.lineWidth = 3;
-          canvasCtx.stroke();
-
-          hitStatus.innerText = '💥 SCHLAG ERFOLGT (ROT)';
-          hitStatus.className = 'metric-value status-late';
-
-          // 3. AUTOMATISCHER SPLIT-STEP CHECK (Während Rot aktiv ist)
-          const leftHip = landmarks[23];
-          const rightHip = landmarks[24];
-
-          if (leftHip.visibility > 0.5 && rightHip.visibility > 0.5) {
-            const currentHipY = (leftHip.y + rightHip.y) / 2;
-
-            if (playerReceiverHipY !== null) {
-              const hipDip = currentHipY - playerReceiverHipY; // Absenken
-              if (hipDip > 0.008) {
-                splitDetectedInWindow = true;
-              }
-            }
-            playerReceiverHipY = currentHipY;
-          }
-
-          if (splitDetectedInWindow) {
-            splitStatus.innerText = '🎯 PERFEKT! Split-Step während Schlag';
-            splitStatus.className = 'metric-value status-perfect';
-          } else {
-            splitStatus.innerText = '⚠️ Keinen Split-Step erkannt';
-            splitStatus.className = 'metric-value status-early';
-          }
-
+        if (splitDetectedInWindow) {
+          splitStatus.innerText = '🎯 PERFEKT! Split-Step erkannt';
+          splitStatus.className = 'metric-value status-perfect';
         } else {
-          hitStatus.innerText = 'Warte auf nächsten Schlag...';
-          hitStatus.className = 'metric-value';
+          splitStatus.innerText = '⚠️ Kein Split-Step während Schlag';
+          splitStatus.className = 'metric-value status-early';
         }
-      }
-      canvasCtx.restore();
-    });
 
-    async function processFrame() {
-      if (!videoElement.paused && !videoElement.ended) {
-        await pose.send({ image: videoElement });
-        requestAnimationFrame(processFrame);
+      } else {
+        hitStatus.innerText = 'Warte auf nächsten Schlag...';
+        hitStatus.className = 'metric-value';
       }
     }
+    canvasCtx.restore();
+  });
 
-    videoElement.addEventListener('play', () => {
-      processFrame();
-    });
+  // Kontinuierliche Analyse-Schleife
+  async function processFrame() {
+    if (!videoElement.paused && !videoElement.ended) {
+      await pose.send({ image: videoElement });
+      requestAnimationFrame(processFrame);
+    }
+  }
 
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) {
-        const url = URL.createObjectURL(file);
-        videoElement.src = url;
-        videoElement.load();
-        hitActiveFrames = 0;
-        lastWristY = null;
-        playerReceiverHipY = null;
-      }
-    });
-  </script>
-</body>
-</html>
+  videoElement.addEventListener('play', () => {
+    processFrame();
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      videoElement.src = url;
+      videoElement.load();
+      hitActiveFrames = 0;
+      lastWristY = null;
+      playerReceiverHipY = null;
+    }
+  });
+</script>
