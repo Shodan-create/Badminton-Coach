@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Badminton Coach - Automatische KI-Analyse</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #121212;
+      color: #ffffff;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    h1 {
+      margin-bottom: 10px;
+    }
+
+    .controls {
+      margin-bottom: 20px;
+    }
+
+    input[type="file"] {
+      background: #1e1e1e;
+      color: #fff;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #333;
+      cursor: pointer;
+    }
+
+    .video-container {
+      position: relative;
+      max-width: 90vw;
+      max-height: 70vh;
+      display: flex;
+      justify-content: center;
+    }
+
+    video {
+      max-width: 100%;
+      max-height: 70vh;
+      border-radius: 8px;
+    }
+
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    /* Feedback-Box für automatische Hinweise */
+    #feedbackBox {
+      margin-top: 15px;
+      padding: 12px 20px;
+      border-radius: 6px;
+      font-weight: bold;
+      font-size: 1.1rem;
+      background-color: #1e1e1e;
+      border: 2px solid #444;
+      min-width: 300px;
+      text-align: center;
+    }
+
+    .status-ok {
+      color: #00ff66;
+      border-color: #00ff66 !important;
+    }
+
+    .status-warning {
+      color: #ff3333;
+      border-color: #ff3333 !important;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Badminton KI Video-Analyse</h1>
+  
+  <div class="controls">
+    <input type="file" id="videoUpload" accept="video/*" />
+  </div>
+
+  <div class="video-container">
+    <video id="inputVideo" controls></video>
+    <canvas id="outputCanvas"></canvas>
+  </div>
+
+  <div id="feedbackBox">Lade ein Video hoch, um die Analyse zu starten.</div>
+
+  <script>
+    const videoElement = document.getElementById('inputVideo');
+    const canvasElement = document.getElementById('outputCanvas');
+    const canvasCtx = canvasElement.getContext('2d');
+    const fileInput = document.getElementById('videoUpload');
+    const feedbackBox = document.getElementById('feedbackBox');
+
+    // Mathematische Hilfsfunktion: Berechnet den Winkel zwischen 3 Punkten (in Grad)
+    function calculateAngle(p1, p2, p3) {
+      const radians = Math.atan2(p3.y - p2.y, p3.x - p2.x) - Math.atan2(p1.y - p2.y, p1.x - p2.x);
+      let angle = Math.abs((radians * 180.0) / Math.PI);
+      if (angle > 180.0) {
+        angle = 360.0 - angle;
+      }
+      return Math.round(angle);
+    }
+
+    // MediaPipe Pose initialisieren
+    const pose = new Pose({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+      modelComplexity: 1,
+      smoothLandmarks: true,
+      minDetectionConfidence: 0.5,
+      minTrackingConfidence: 0.5
+    });
+
+    pose.onResults((results) => {
+      canvasElement.width = videoElement.videoWidth;
+      canvasElement.height = videoElement.videoHeight;
+
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      if (results.poseLandmarks) {
+        const landmarks = results.poseLandmarks;
+
+        // Skelett auf den Canvas zeichnen
+        drawConnectors(canvasCtx, landmarks, POSE_CONNECTIONS, { color: '#00FF00', lineWidth: 4 });
+        drawLandmarks(canvasCtx, landmarks, { color: '#FF0000', lineWidth: 2, radius: 5 });
+
+        // AUTOMATISCHE BADMINTON-ANALYSE:
+        // Indizes für den rechten Arm: Schulter (12), Ellbogen (14), Handgelenk (16)
+        const shoulder = landmarks[12];
+        const elbow = landmarks[14];
+        const wrist = landmarks[16];
+
+        // Nur berechnen, wenn die Punkte sichtbar sind
+        if (shoulder.visibility > 0.5 && elbow.visibility > 0.5 && wrist.visibility > 0.5) {
+          const elbowAngle = calculateAngle(shoulder, elbow, wrist);
+
+          // 1. Winkel direkt beim Ellbogen im Video anzeigen
+          const canvasX = elbow.x * canvasElement.width;
+          const canvasY = elbow.y * canvasElement.height;
+          
+          canvasCtx.fillStyle = '#FFFF00';
+          canvasCtx.font = 'bold 24px Arial';
+          canvasCtx.fillText(`${elbowAngle}°`, canvasX + 15, canvasY);
+
+          // 2. Automatisches Coaching-Feedback prüfen
+          if (elbowAngle < 90) {
+            feedbackBox.className = 'status-warning';
+            feedbackBox.innerText = `⚠️ Ellbogen zu tief (${elbowAngle}°)! Führungshand höher nehmen!`;
+          } else {
+            feedbackBox.className = 'status-ok';
+            feedbackBox.innerText = `✅ Gute Ellbogenhaltung (${elbowAngle}°)`;
+          }
+        } else {
+          feedbackBox.className = '';
+          feedbackBox.innerText = 'Positioniere den Spieler gut sichtbar im Bild.';
+        }
+      }
+      canvasCtx.restore();
+    });
+
+    async function processFrame() {
+      if (!videoElement.paused && !videoElement.ended) {
+        await pose.send({ image: videoElement });
+        requestAnimationFrame(processFrame);
+      }
+    }
+
+    videoElement.addEventListener('play', () => {
+      processFrame();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const url = URL.createObjectURL(file);
+        videoElement.src = url;
+        videoElement.load();
+      }
+    });
+  </script>
+</body>
+</html>
